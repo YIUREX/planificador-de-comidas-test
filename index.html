@@ -498,6 +498,18 @@
     </div>
   </div>
 
+  <!-- Modal de confirmación de borrado -->
+<div class="modal-overlay" id="modalConfirmacion">
+  <div class="modal-content">
+    <h2>¿Eliminar comida?</h2>
+    <p>¿Estás seguro de que quieres eliminar esta comida?</p>
+    <div class="buttons">
+      <button class="cancel" onclick="cerrarModalConfirmacion()">Cancelar</button>
+      <button class="save" onclick="confirmarBorrado()">Eliminar</button>
+    </div>
+  </div>
+</div>
+
   <script>
     // --- VARIABLES GLOBALES ---
     const franjas = ["desayuno", "comida", "cena"];
@@ -580,9 +592,16 @@
               <div class="title" title="${comida.nombre}">${comida.nombre}</div>
               <div class="actions">
                 <button onclick="copiarComida(event, '${dia}', '${franja}')" aria-label="Copiar comida de ${franja} de ${dia}">Copiar</button>
-                <button onclick="borrarComida(event, '${dia}', '${franja}')" aria-label="Borrar comida de ${franja} de ${dia}">Borrar</button>
+                <button aria-label="Borrar comida de ${franja} de ${dia}" class="btn-borrar">Borrar</button>
+
               </div>
             `;
+            const btnBorrar = td.querySelector('.btn-borrar');
+btnBorrar.addEventListener('click', (e) => {
+  e.stopPropagation();
+  borrarComida(dia, franja);
+});
+
           } else {
             td.innerHTML = "&nbsp;";
           }
@@ -657,6 +676,40 @@
       modalDia = null;
       modalFranja = null;
     }
+
+    
+    
+    let comidaPendienteBorrar = null;
+
+function abrirModalConfirmacion(dia, franja) {
+  comidaPendienteBorrar = { dia, franja };
+  document.getElementById("modalConfirmacion").style.display = "flex";
+}
+
+function cerrarModalConfirmacion() {
+  comidaPendienteBorrar = null;
+  document.getElementById("modalConfirmacion").style.display = "none";
+}
+
+function confirmarBorrado() {
+  if (!comidaPendienteBorrar) return;
+
+  const { dia, franja } = comidaPendienteBorrar;
+  const data = getDataSemana();
+
+  if (data[dia]) {
+    if (data[dia][franja]) {
+      delete data[dia][franja];
+      if (Object.keys(data[dia]).length === 0) {
+        delete data[dia];
+      }
+      guardarDataSemana(data);
+      renderTabla();
+    }
+  }
+
+  cerrarModalConfirmacion();
+}
 
     function cargarIngredientesModal(ingredientes) {
       const lista = document.getElementById("ingredientesList");
@@ -764,23 +817,10 @@
     }
 
     // --- FUNCIONES DE BORRAR COMIDA ---
-    function borrarComida(e, dia, franja) {
-      e.stopPropagation();
-      if (!confirm("¿Seguro que quieres borrar esta comida?")) return;
+    function borrarComida(dia, franja) {
+  abrirModalConfirmacion(dia, franja);
+}
 
-      let data = getDataSemana();
-      if (data[dia]) {
-        if (data[dia][franja]) {
-          delete data[dia][franja];
-        }
-        // Si el día queda vacío, borrar objeto
-        if (Object.keys(data[dia]).length === 0) {
-          delete data[dia];
-        }
-        guardarDataSemana(data);
-        cargarTabla();
-      }
-    }
 
     // --- FUNCIONES PARA MODAL LISTA DE LA COMPRA ---
     function mostrarResumen() {
