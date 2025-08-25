@@ -1,975 +1,1051 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Planificador de comidas</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Planificador de Comidas</title>
+<style>
+  :root{
+    --bg: #f7f7fb;
+    --fg: #0f1020;
+    --muted:#7a7d91;
+    --card:#ffffff;
+    --primary:#6c7cff;
+    --primary-weak:#e8ebff;
+    --ring: rgba(108,124,255,.4);
+    --shadow: 0 10px 30px rgba(0,0,0,.06);
+    --radius: 18px;
+  }
+  /* Dark mode */
+  :root.dark{
+    --bg: #0e1116;
+    --fg: #e9eaf0;
+    --muted:#9aa3b2;
+    --card:#121721;
+    --primary:#8ea0ff;
+    --primary-weak:#20263a;
+    --ring: rgba(142,160,255,.45);
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+    background: var(--bg);
+    color: var(--fg);
+    line-height:1.35;
+  }
 
-  <!-- TailwindCSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            header: {
-              DEFAULT: '#4a4a4a'
-            }
-          },
-          boxShadow: {
-            'elev': '0 10px 20px rgba(0,0,0,0.12), 0 6px 6px rgba(0,0,0,0.08)'
-          },
-          borderRadius: {
-            'xl2': '1rem'
-          },
-          keyframes: {
-            'modal-in': { '0%': { opacity: 0, transform: 'translateY(10px) scale(0.98)' }, '100%': { opacity: 1, transform: 'translateY(0) scale(1)' } },
-            'modal-out': { '0%': { opacity: 1, transform: 'translateY(0) scale(1)' }, '100%': { opacity: 0, transform: 'translateY(10px) scale(0.98)' } }
-          },
-          animation: {
-            'modal-in': 'modal-in 180ms ease-out',
-            'modal-out': 'modal-out 150ms ease-in'
-          }
-        }
-      }
-    }
-  </script>
+  /* Layout */
+  .app{
+    min-height:100dvh;
+    display:grid;
+    grid-template-rows: auto 1fr auto;
+    gap:14px;
+    padding:16px 16px 86px; /* space for bottom nav */
+  }
+  header{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .title{
+    font-size: clamp(20px, 3.5vw, 28px);
+    font-weight:800;
+    letter-spacing:.2px;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:10px 14px;
+    background: var(--card);
+    border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    outline: 2px solid transparent;
+  }
+  .title[contenteditable="true"]:focus{
+    outline: 3px solid var(--ring);
+  }
+  .subtitle{
+    color: var(--muted);
+    font-size: 13px;
+    margin-left: 2px;
+  }
 
-  <style>
-    :root {
-      --accent: #4a4a4a; /* Color cabecera editable */
-    }
-    .accent-bg { background-color: var(--accent); }
-    .accent-text { color: #f0f0f0; }
-    .accent-dark { background-color: color-mix(in srgb, var(--accent) 80%, black); }
-    .fade-enter { animation: modal-in 180ms ease-out; }
-    .fade-leave { animation: modal-out 150ms ease-in forwards; }
-    .backdrop {
-      background: rgba(0,0,0,0.45);
-      backdrop-filter: blur(2px);
-    }
-    .scrollbar-thin::-webkit-scrollbar { height: 6px; width: 6px; }
-    .scrollbar-thin::-webkit-scrollbar-thumb { background: #c3c3c3; border-radius: 8px; }
-    .dark .scrollbar-thin::-webkit-scrollbar-thumb { background: #555; }
-    .btn {
-      @apply px-3 py-2 rounded-lg font-medium shadow-sm;
-    }
-    .btn-primary { @apply text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800; }
-    .btn-ghost { @apply bg-transparent hover:bg-black/5 dark:hover:bg-white/5; }
-    .btn-danger { @apply text-white bg-red-600 hover:bg-red-700 active:bg-red-800; }
-    .btn-success { @apply text-white bg-green-600 hover:bg-green-700 active:bg-green-800; }
-    .input {
-      @apply w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-zinc-900 dark:border-zinc-700;
-    }
-    .chip {
-      @apply inline-block text-xs px-2 py-1 rounded-full bg-black/5 dark:bg-white/10;
-    }
-    .nav-item { @apply flex flex-col items-center justify-center w-full py-2 gap-1 text-xs font-medium; }
-    .nav-item.active { @apply text-blue-600 dark:text-blue-400; }
-    .td-filled { background-color: #fff8cc; }
-    .dark .td-filled { background-color: #3a3a24; }
-  </style>
+  /* Tabs container */
+  main{ max-width: 1100px; width:100%; margin: 0 auto; display:grid; gap:16px;}
+  section.view{ display:none; }
+  section.view.active{ display:block; }
+
+  /* Planner */
+  .planner-card{
+    background: var(--card);
+    border:1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .planner-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; border-bottom:1px dashed color-mix(in srgb, var(--fg) 10%, transparent);
+  }
+  .week-nav{
+    display:flex; align-items:center; gap:8px;
+  }
+  .btn{
+    appearance:none; border:0; cursor:pointer;
+    background: var(--primary);
+    color:white; padding:10px 14px; border-radius:14px; font-weight:700;
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--primary) 35%, transparent);
+    transition:.2s transform ease, .2s opacity ease, .2s background ease;
+  }
+  .btn:hover{ transform: translateY(-1px) }
+  .btn:active{ transform: translateY(0) scale(.98) }
+  .btn.ghost{
+    background: var(--primary-weak);
+    color: var(--primary);
+    box-shadow:none;
+  }
+  .btn.icon{
+    width:36px; height:36px; padding:0;
+    display:inline-grid; place-items:center; border-radius:12px;
+  }
+  .btn.small{ padding:8px 12px; border-radius:12px; font-size:13px }
+
+  .week-label{
+    font-weight:800; letter-spacing:.3px;
+  }
+  .helper{ color:var(--muted); font-size:12px }
+
+  .planner-grid{
+    width:100%; overflow:auto; padding:10px 10px 14px;
+  }
+  table.grid{
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    min-width: 720px;
+    background: transparent;
+  }
+  .grid thead th{
+    position:sticky; top:0; background: var(--card);
+    z-index:2;
+    font-size:13px; color: var(--muted); text-align:left; padding:10px 12px;
+    border-bottom:1px dashed color-mix(in srgb, var(--fg) 10%, transparent);
+  }
+  .meal-col{ width:140px; }
+  .grid tbody td, .grid thead th{
+    border-right:1px dashed color-mix(in srgb, var(--fg) 10%, transparent);
+  }
+  .grid thead th:last-child, .grid tbody td:last-child{ border-right:0 }
+  .grid tbody tr{
+    border-bottom:1px dashed color-mix(in srgb, var(--fg) 10%, transparent);
+  }
+  .grid tbody tr:last-child{ border-bottom:0 }
+  .slot{
+    padding:8px;
+    vertical-align:top;
+  }
+  .cell{
+    border:1px dashed color-mix(in srgb, var(--fg) 12%, transparent);
+    border-radius:12px;
+    padding:10px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--primary-weak) 0%, transparent), color-mix(in srgb, var(--primary-weak) 10%, transparent));
+    min-height:70px;
+    display:grid; grid-template-rows:auto 1fr; gap:6px;
+    cursor:pointer;
+    transition:.15s border-color ease, .15s background ease, .15s transform ease;
+  }
+  .cell:hover{ border-color: var(--primary); transform: translateY(-1px) }
+  .cell .name{ font-weight:700; font-size:14px }
+  .cell .meta{ font-size:12px; color:var(--muted) }
+
+  .legend{
+    display:flex; align-items:center; gap:10px; padding:10px 14px; color:var(--muted); border-top:1px dashed color-mix(in srgb, var(--fg) 10%, transparent);
+  }
+
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; padding:10px 14px;
+    border-top:1px dashed color-mix(in srgb, var(--fg) 10%, transparent);
+  }
+
+  /* Bottom nav */
+  .tabs{
+    position:fixed; inset:auto 0 10px 0;
+    display:flex; gap:10px; justify-content:space-evenly;
+    padding:10px; z-index:50;
+  }
+  .tab-btn{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:12px; border-radius:16px; font-weight:700; font-size:14px;
+    background: var(--card);
+    color: var(--muted);
+    border:1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+    box-shadow: var(--shadow);
+    cursor:pointer; transition:.2s transform ease, .2s color ease, .2s background ease;
+  }
+  .tab-btn.active{ color: var(--primary); background: color-mix(in srgb, var(--primary-weak) 50%, var(--card)); }
+  .tab-btn:active{ transform: translateY(1px) }
+
+  /* Recipes */
+  .recipes-wrap{
+    display:grid; gap:14px;
+  }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+  .input, textarea, select{
+    width:100%; padding:12px 12px; border-radius:12px; border:1px solid color-mix(in srgb, var(--fg) 12%, transparent);
+    background: var(--card); color: var(--fg); outline: none; box-shadow: var(--shadow);
+  }
+  .input:focus, textarea:focus, select:focus{ border-color: var(--primary); box-shadow: 0 0 0 4px var(--ring); }
+  textarea{ min-height:90px; resize:vertical }
+  .grid-cards{ display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:12px }
+  .card{
+    background: var(--card);
+    border:1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow:hidden;
+    display:grid; grid-template-rows: 150px 1fr auto; 
+  }
+  .thumb{ width:100%; height:100%; object-fit:cover; background: #e3e7ef}
+  .card-body{ padding:12px }
+  .card-title{ font-weight:800 }
+  .card-meta{ color:var(--muted); font-size:13px }
+  .card-actions{ display:flex; gap:8px; padding:10px; border-top:1px dashed color-mix(in srgb, var(--fg) 10%, transparent) }
+
+  /* To-do (shopping) */
+  .todo{
+    background: var(--card);
+    border:1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow:hidden;
+  }
+  .todo-head{ padding:12px 14px; border-bottom:1px dashed color-mix(in srgb, var(--fg) 10%, transparent); display:flex; gap:8px; align-items:center }
+  .todo-list{ padding:10px 10px 14px; display:grid; gap:8px }
+  .todo-item{
+    display:grid; grid-template-columns: 28px 1fr auto; gap:8px; align-items:center;
+    padding:8px 10px; border-radius:12px; border:1px dashed color-mix(in srgb, var(--fg) 10%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--primary-weak) 0%, transparent), color-mix(in srgb, var(--primary-weak) 10%, transparent));
+  }
+  .todo-item input[type="text"]{
+    border:0; background:transparent; outline:none; color:var(--fg); font-size:14px
+  }
+  .chip{
+    display:inline-flex; align-items:center; gap:6px;
+    background: var(--primary-weak); color: var(--primary);
+    padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700;
+  }
+
+  /* Settings */
+  .settings{ display:grid; gap:14px }
+  .switch{
+    display:flex; align-items:center; justify-content:space-between; padding:12px 14px;
+    background: var(--card); border:1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .switch label{ font-weight:700 }
+  .switch .desc{ color:var(--muted); font-size:12px }
+
+  /* Dialogs (modals) */
+  dialog{
+    border:0; border-radius:20px; padding:0; width:min(720px, 92vw); background: var(--card);
+    color: var(--fg); box-shadow: var(--shadow);
+  }
+  dialog::backdrop{ background: rgba(0,0,0,.35) }
+  .modal{
+    display:grid; grid-template-rows: auto 1fr auto; max-height:80vh;
+  }
+  .modal-head{ padding:14px 16px; border-bottom:1px dashed color-mix(in srgb, var(--fg) 10%, transparent); display:flex; align-items:center; justify-content:space-between; gap:8px }
+  .modal-body{ padding:14px 16px; overflow:auto; display:grid; gap:12px }
+  .modal-actions{ padding:12px 16px; border-top:1px dashed color-mix(in srgb, var(--fg) 10%, transparent); display:flex; justify-content:flex-end; gap:8px }
+
+  /* Tiny icons (emoji for zero-deps) */
+  .i{ font-style:normal }
+
+  /* Responsive tweaks */
+  @media (max-width: 720px){
+    .meal-col{ width:120px }
+  }
+</style>
 </head>
-<body class="bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 transition-colors">
-  <!-- HEADER -->
-  <header class="accent-dark text-white">
-    <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-      <h1 id="tituloEditable" contenteditable="true" class="text-xl md:text-2xl font-bold px-2 py-1 rounded-md bg-white/10 outline-none" onblur="guardarTitulo()">Planificador de comidas</h1>
-      <div class="text-xs opacity-90 select-none">Semana & Recetas</div>
-    </div>
-  </header>
+<body>
+  <div class="app" id="app">
+    <header>
+      <div class="title" id="banner" contenteditable="true" spellcheck="false">Planificador semanal</div>
+      <div class="subtitle">toca para editar</div>
+    </header>
 
-  <!-- MAIN -->
-  <main class="max-w-5xl mx-auto p-4 pb-24">
+    <main>
+      <!-- PLANNER -->
+      <section id="view-planner" class="view active">
+        <div class="planner-card">
+          <div class="planner-head">
+            <div class="week-nav">
+              <button class="btn icon ghost" id="prevWeek" title="Semana anterior" aria-label="Semana anterior">⟨</button>
+              <div>
+                <div class="week-label" id="weekLabel">Semana</div>
+                <div class="helper" id="weekRange"></div>
+              </div>
+              <button class="btn icon ghost" id="nextWeek" title="Semana siguiente" aria-label="Semana siguiente">⟩</button>
+            </div>
+            <div class="row" style="gap:8px">
+              <button class="btn small ghost" id="btnToday">Hoy</button>
+              <button class="btn small" id="btnShopping">Lista de la compra</button>
+            </div>
+          </div>
+          <div class="planner-grid">
+            <table class="grid" id="plannerTable" aria-label="Planificación semanal">
+              <!-- generated -->
+            </table>
+          </div>
+          <div class="legend">
+            <span class="chip">Consejo</span>
+            Toca una celda para <b>añadir</b>, <b>copiar</b>, <b>pegar</b> o <b>borrar</b>.
+          </div>
+          <div class="toolbar">
+            <div class="helper">Todo se guarda automáticamente en tu dispositivo.</div>
+            <div class="row">
+              <button class="btn small ghost" id="btnClearWeek">Vaciar semana</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RECIPES -->
+      <section id="view-recipes" class="view">
+        <div class="recipes-wrap">
+          <div class="row" style="align-items:flex-start">
+            <input class="input" id="recipeSearch" placeholder="Buscar receta por nombre o ingrediente…" />
+            <button class="btn" id="btnNewRecipe">Nueva receta</button>
+          </div>
+          <div class="grid-cards" id="recipesList"></div>
+        </div>
+      </section>
+
+      <!-- CHEF -->
+      <section id="view-chef" class="view">
+        <div class="planner-card" style="padding:24px">
+          <h2 style="margin:0 0 6px">Chef (IA)</h2>
+          <p class="helper" style="margin:0 0 14px">Próximamente</p>
+          <div style="display:grid; gap:10px">
+            <div class="switch">
+              <div>
+                <label>Integración con IA</label>
+                <div class="desc">Aquí podrás generar menús y ajustar calorías automáticamente.</div>
+              </div>
+              <button class="btn ghost">Próximamente</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="view-settings" class="view">
+        <div class="settings">
+          <div class="switch">
+            <div>
+              <label>Color principal</label>
+              <div class="desc">Personaliza el acento de la app.</div>
+            </div>
+            <input type="color" id="colorPicker" aria-label="Elegir color principal" />
+          </div>
+
+          <div class="switch">
+            <div>
+              <label>Modo oscuro</label>
+              <div class="desc">Activa/desactiva el tema oscuro.</div>
+            </div>
+            <label class="row" style="align-items:center; gap:10px">
+              <input type="checkbox" id="toggleDark" />
+              <span class="chip">Alternar</span>
+            </label>
+          </div>
+
+          <div class="switch">
+            <div>
+              <label>Franjas de comidas</label>
+              <div class="desc">Muestra u oculta desayunos, comidas o cenas.</div>
+            </div>
+            <div class="row" style="gap:10px">
+              <label class="chip"><input type="checkbox" id="showBreakfast" checked style="accent-color: var(--primary)"/> Desayuno</label>
+              <label class="chip"><input type="checkbox" id="showLunch" checked style="accent-color: var(--primary)"/> Comida</label>
+              <label class="chip"><input type="checkbox" id="showDinner" checked style="accent-color: var(--primary)"/> Cena</label>
+            </div>
+          </div>
+
+          <div class="switch">
+            <div>
+              <label>Gestión versión Pro</label>
+              <div class="desc">Suscripciones, recuperación y ventajas.</div>
+            </div>
+            <button class="btn ghost" id="btnPro">Gestión versión Pro</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
     <!-- TABS -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-      <button class="btn btn-ghost border dark:border-zinc-800" data-tab="plan" onclick="showTab('plan')">🗓️ Planificación</button>
-      <button class="btn btn-ghost border dark:border-zinc-800" data-tab="recetas" onclick="showTab('recetas')">🍲 Recetas</button>
-      <button class="btn btn-ghost border dark:border-zinc-800" data-tab="chef" onclick="showTab('chef')">🤖 Chef (IA)</button>
-      <button class="btn btn-ghost border dark:border-zinc-800" data-tab="ajustes" onclick="showTab('ajustes')">⚙️ Ajustes</button>
+    <nav class="tabs" aria-label="Navegación inferior">
+      <button class="tab-btn active" data-tab="planner">🗓️ Planificación</button>
+      <button class="tab-btn" data-tab="recipes">📚 Recetas</button>
+      <button class="tab-btn" data-tab="chef">👨‍🍳 Chef</button>
+      <button class="tab-btn" data-tab="settings">⚙️ Ajustes</button>
+    </nav>
+  </div>
+
+  <!-- MODALS -->
+  <!-- Planner cell modal -->
+  <dialog id="cellDialog">
+    <div class="modal">
+      <div class="modal-head">
+        <strong id="cellDialogTitle">Editar comida</strong>
+        <button class="btn icon ghost" data-close="cellDialog" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body" id="cellDialogBody">
+        <div id="cellCurrent" class="helper">Sin contenido</div>
+        <div class="row" style="gap:8px; flex-wrap:wrap">
+          <button class="btn" id="cellSelectRecipe">Seleccionar receta</button>
+          <button class="btn ghost" id="cellAddManual">Añadir manualmente</button>
+          <button class="btn ghost" id="cellCopy">Copiar</button>
+          <button class="btn ghost" id="cellPaste">Pegar</button>
+          <button class="btn ghost" id="cellClear">Borrar</button>
+        </div>
+        <!-- Manual form (hidden initially) -->
+        <form id="manualForm" style="display:none; gap:10px" class="recipes-wrap">
+          <input class="input" id="manualName" placeholder="Nombre del plato" required />
+          <textarea id="manualIngr" placeholder="Ingredientes (separados por coma)"></textarea>
+          <div class="row">
+            <button type="submit" class="btn">Guardar</button>
+            <button type="button" class="btn ghost" id="manualCancel">Cancelar</button>
+          </div>
+        </form>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" data-close="cellDialog">Listo</button>
+      </div>
     </div>
+  </dialog>
 
-    <!-- PAGE: PLANIFICACIÓN -->
-    <section id="tab-plan" class="space-y-4">
-      <!-- Semana controls -->
-      <div class="flex items-center justify-center gap-3">
-        <button class="btn btn-ghost border dark:border-zinc-800" onclick="cambiarSemana(-1)">⬅️</button>
-        <strong id="rangoSemana" class="px-3 py-2 rounded-lg bg-white dark:bg-zinc-900 border dark:border-zinc-800 select-none"></strong>
-        <button class="btn btn-ghost border dark:border-zinc-800" onclick="cambiarSemana(1)">➡️</button>
+  <!-- Recipe picker modal -->
+  <dialog id="pickerDialog">
+    <div class="modal">
+      <div class="modal-head">
+        <strong>Seleccionar receta</strong>
+        <button class="btn icon ghost" data-close="pickerDialog" aria-label="Cerrar">✕</button>
       </div>
-
-      <!-- Tabla -->
-      <div class="overflow-x-auto shadow-elev rounded-xl bg-white dark:bg-zinc-900 border dark:border-zinc-800">
-        <table class="min-w-[800px] w-full text-sm">
-          <thead>
-            <tr class="text-white" style="background: var(--accent);">
-              <th class="p-3 text-left">Franja/Día</th>
-              <th class="p-3">Lunes</th>
-              <th class="p-3">Martes</th>
-              <th class="p-3">Miércoles</th>
-              <th class="p-3">Jueves</th>
-              <th class="p-3">Viernes</th>
-              <th class="p-3">Sábado</th>
-              <th class="p-3">Domingo</th>
-            </tr>
-          </thead>
-          <tbody id="tbody" class="[&_td]:align-top [&_td]:p-3"></tbody>
-        </table>
+      <div class="modal-body" style="display:grid; gap:10px">
+        <input class="input" id="pickerSearch" placeholder="Buscar…" />
+        <div class="grid-cards" id="pickerList"></div>
       </div>
-
-      <!-- Botones bajo tabla -->
-      <div class="flex flex-wrap items-center justify-center gap-2">
-        <button id="btnListaCompra" class="btn btn-primary">Lista de la compra</button>
-        <button class="btn btn-ghost" onclick="vaciarSemanaModal()">Vaciar semana</button>
+      <div class="modal-actions">
+        <button class="btn ghost" data-close="pickerDialog">Cancelar</button>
       </div>
-    </section>
+    </div>
+  </dialog>
 
-    <!-- PAGE: RECETAS -->
-    <section id="tab-recetas" class="hidden space-y-4">
-      <div class="flex flex-col md:flex-row gap-3 justify-between">
-        <div class="flex-1">
-          <input id="buscadorRecetas" class="input" placeholder="Buscar recetas por nombre o ingrediente..." oninput="renderRecetas()" />
-        </div>
-        <div>
-          <button class="btn btn-success" onclick="abrirModalNuevaReceta()">+ Nueva receta</button>
-        </div>
+  <!-- New/Edit recipe modal -->
+  <dialog id="recipeDialog">
+    <div class="modal">
+      <div class="modal-head">
+        <strong id="recipeDialogTitle">Nueva receta</strong>
+        <button class="btn icon ghost" data-close="recipeDialog" aria-label="Cerrar">✕</button>
       </div>
-
-      <div id="listaRecetas" class="grid gap-3 md:grid-cols-2 lg:grid-cols-3"></div>
-      <p id="sinRecetas" class="hidden text-sm opacity-70">No hay recetas todavía. Crea tu primera con “+ Nueva receta”.</p>
-    </section>
-
-    <!-- PAGE: CHEF -->
-    <section id="tab-chef" class="hidden">
-      <div class="rounded-xl p-6 shadow-elev bg-white dark:bg-zinc-900 border dark:border-zinc-800 text-center">
-        <div class="text-5xl mb-3">✨</div>
-        <h2 class="text-xl font-bold mb-2">Chef IA — Próximamente</h2>
-        <p class="opacity-80">Muy pronto podrás generar recetas, ideas de menú y sugerencias con lo que tengas en la nevera.</p>
-      </div>
-    </section>
-
-    <!-- PAGE: AJUSTES -->
-    <section id="tab-ajustes" class="hidden space-y-4">
-      <div class="rounded-xl p-6 shadow-elev bg-white dark:bg-zinc-900 border dark:border-zinc-800">
-        <h3 class="text-lg font-semibold mb-4">Apariencia</h3>
-        <div class="grid md:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-sm mb-1">Tema</label>
-            <select id="temaSelect" class="input" onchange="cambiarTemaSelect(this.value)">
-              <option value="system">Automático (según sistema)</option>
-              <option value="light">Claro</option>
-              <option value="dark">Oscuro</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm mb-1">Color de cabecera</label>
-            <input id="colorCabecera" type="color" class="input h-10 p-1" onchange="cambiarColorCabecera(this.value)" />
-          </div>
-          <div>
-            <label class="block text-sm mb-1">Título de la app</label>
-            <input id="tituloInputMirror" class="input" placeholder="Planificador de comidas" oninput="syncTitulo(this.value)" />
-          </div>
-        </div>
-      </div>
-
-      <div class="rounded-xl p-6 shadow-elev bg-white dark:bg-zinc-900 border dark:border-zinc-800">
-        <h3 class="text-lg font-semibold mb-4">Franjas a mostrar</h3>
-        <div class="grid md:grid-cols-3 gap-3">
-          <label class="flex items-center gap-2"><input type="checkbox" id="chkDesayuno" class="scale-125" /> Desayuno</label>
-          <label class="flex items-center gap-2"><input type="checkbox" id="chkComida" class="scale-125" /> Comida</label>
-          <label class="flex items-center gap-2"><input type="checkbox" id="chkCena" class="scale-125" /> Cena</label>
-        </div>
-      </div>
-
-      <div class="rounded-xl p-6 shadow-elev bg-white dark:bg-zinc-900 border dark:border-zinc-800">
-        <h3 class="text-lg font-semibold mb-4">Datos</h3>
-        <div class="flex flex-wrap gap-2">
-          <button class="btn btn-ghost" onclick="exportarDatos()">Exportar datos (.json)</button>
-          <label class="btn btn-ghost cursor-pointer">
-            Importar datos (.json)
-            <input type="file" accept="application/json" class="hidden" onchange="importarDatos(this.files[0])" />
+      <form class="modal-body" id="recipeForm">
+        <input class="input" id="rName" placeholder="Nombre" required />
+        <textarea id="rDesc" placeholder="Descripción"></textarea>
+        <textarea id="rIngr" placeholder="Ingredientes (uno por línea o separados por coma)"></textarea>
+        <div class="row" style="width:100%">
+          <input class="input" id="rPhotoUrl" placeholder="URL de foto (opcional)" />
+          <label class="btn ghost" style="white-space:nowrap; cursor:pointer">
+            Subir imagen
+            <input type="file" id="rPhotoFile" accept="image/*" style="display:none" />
           </label>
-          <button class="btn btn-danger" onclick="confirmarReset()">Restablecer todo</button>
         </div>
-        <p class="text-xs opacity-70 mt-2">Se guardan en tu navegador (LocalStorage). Exporta antes de limpiar.</p>
-      </div>
-    </section>
-  </main>
-
-  <!-- BOTTOM NAV (sticky) -->
-  <nav class="fixed bottom-0 left-0 right-0 border-t bg-white/90 dark:bg-zinc-900/90 backdrop-blur shadow z-40">
-    <div class="max-w-5xl mx-auto grid grid-cols-4">
-      <button class="nav-item active" onclick="showTab('plan')" id="nav-plan">🗓️<span>Plan</span></button>
-      <button class="nav-item" onclick="showTab('recetas')" id="nav-recetas">🍲<span>Recetas</span></button>
-      <button class="nav-item" onclick="showTab('chef')" id="nav-chef">🤖<span>Chef</span></button>
-      <button class="nav-item" onclick="showTab('ajustes')" id="nav-ajustes">⚙️<span>Ajustes</span></button>
-    </div>
-  </nav>
-
-  <!-- ========== MODALES ========== -->
-
-  <!-- Modal Editar Comida / Seleccionar Receta -->
-  <div id="modalComida" class="fixed inset-0 hidden items-center justify-center z-50">
-    <div class="absolute inset-0 backdrop fade-enter backdrop"></div>
-    <div class="relative bg-white dark:bg-zinc-900 border dark:border-zinc-800 w-[92%] max-w-lg rounded-2xl shadow-elev p-4 fade-enter">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="text-lg font-semibold">Editar comida</h3>
-        <button class="btn btn-ghost" onclick="cerrarModalComida()">✖</button>
-      </div>
-
-      <div class="mb-3 border-b dark:border-zinc-800 flex gap-2">
-        <button id="tabManualBtn" class="btn btn-ghost" onclick="setModalTab('manual')">Escribir manual</button>
-        <button id="tabRecetasBtn" class="btn btn-ghost" onclick="setModalTab('recetas')">Elegir guardada</button>
-      </div>
-
-      <!-- Manual -->
-      <div id="modalManual" class="space-y-2">
-        <label class="block text-sm">Nombre del plato</label>
-        <input id="inputNombre" class="input" placeholder="Ej: Ensalada de pollo" />
-        <label class="block text-sm mt-2">Ingredientes</label>
-        <div id="ingredientesList" class="max-h-40 overflow-y-auto border dark:border-zinc-800 rounded-lg p-2 space-y-2">
-          <!-- items -->
-        </div>
-        <div class="flex gap-2 mt-2">
-          <button class="btn btn-ghost" onclick="agregarIngrediente()">+ Ingrediente</button>
-        </div>
-        <div class="flex justify-end gap-2 mt-3">
-          <button class="btn" onclick="cerrarModalComida()">Cancelar</button>
-          <button class="btn btn-primary" onclick="guardarComida()">Guardar</button>
-        </div>
-      </div>
-
-      <!-- Elegir Receta -->
-      <div id="modalElegirReceta" class="hidden space-y-2">
-        <input id="buscarRecetaModal" class="input" placeholder="Buscar receta..." oninput="renderRecetasEnModal()" />
-        <div id="listaRecetasModal" class="max-h-64 overflow-y-auto space-y-2"></div>
+        <input type="hidden" id="rId" />
+      </form>
+      <div class="modal-actions">
+        <button class="btn ghost" data-close="recipeDialog">Cancelar</button>
+        <button class="btn" id="saveRecipe">Guardar</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <!-- Modal Confirmar borrado comida -->
-  <div id="modalConfirmar" class="fixed inset-0 hidden items-center justify-center z-50">
-    <div class="absolute inset-0 backdrop fade-enter backdrop"></div>
-    <div class="relative bg-white dark:bg-zinc-900 border dark:border-zinc-800 w-[92%] max-w-md rounded-2xl shadow-elev p-4 fade-enter">
-      <h3 class="text-lg font-semibold mb-2">¿Eliminar comida?</h3>
-      <p class="opacity-80 mb-4">Esta acción no se puede deshacer.</p>
-      <div class="flex justify-end gap-2">
-        <button class="btn" onclick="cerrarModalConfirmar()">Cancelar</button>
-        <button class="btn btn-danger" onclick="confirmarBorrado()">Eliminar</button>
+  <!-- Shopping list modal -->
+  <dialog id="shoppingDialog">
+    <div class="modal">
+      <div class="modal-head">
+        <strong>Lista de la compra</strong>
+        <button class="btn icon ghost" data-close="shoppingDialog" aria-label="Cerrar">✕</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Modal Lista de la compra -->
-  <div id="modalCompra" class="fixed inset-0 hidden items-center justify-center z-50">
-    <div class="absolute inset-0 backdrop fade-enter backdrop"></div>
-    <div class="relative bg-white dark:bg-zinc-900 border dark:border-zinc-800 w-[92%] max-w-lg rounded-2xl shadow-elev p-4 fade-enter">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="text-lg font-semibold">Lista de la compra</h3>
-        <button class="btn btn-ghost" onclick="cerrarModalCompra()">✖</button>
-      </div>
-
-      <div class="flex gap-2 mb-3">
-        <input id="inputCompra" class="input" placeholder="Añadir producto..." onkeydown="if(event.key==='Enter'){addCompraItem()}" />
-        <button class="btn btn-success" onclick="addCompraItem()">Añadir</button>
-      </div>
-
-      <div id="listaCompraContenido" class="max-h-64 overflow-y-auto space-y-2"></div>
-
-      <div class="flex justify-between mt-4">
-        <button class="btn btn-ghost" onclick="borrarMarcadosCompra()">Borrar marcados</button>
-        <button class="btn btn-danger" onclick="borrarTodoCompra()">Vaciar lista</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal Nueva Receta -->
-  <div id="modalReceta" class="fixed inset-0 hidden items-center justify-center z-50">
-    <div class="absolute inset-0 backdrop fade-enter backdrop"></div>
-    <div class="relative bg-white dark:bg-zinc-900 border dark:border-zinc-800 w-[92%] max-w-lg rounded-2xl shadow-elev p-4 fade-enter">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="text-lg font-semibold" id="recetaModalTitulo">Nueva receta</h3>
-        <button class="btn btn-ghost" onclick="cerrarModalReceta()">✖</button>
-      </div>
-
-      <div class="space-y-3">
-        <div>
-          <label class="block text-sm mb-1">Nombre</label>
-          <input id="recetaNombre" class="input" />
-        </div>
-        <div>
-          <label class="block text-sm mb-1">Descripción</label>
-          <textarea id="recetaDesc" class="input h-24"></textarea>
-        </div>
-        <div>
-          <label class="block text-sm mb-1">Ingredientes</label>
-          <div id="recetaIngList" class="border dark:border-zinc-800 rounded-lg p-2 space-y-2 max-h-40 overflow-y-auto"></div>
-          <button class="btn btn-ghost mt-2" onclick="recetaAgregarIng()">+ Ingrediente</button>
-        </div>
-        <div>
-          <label class="block text-sm mb-1">Foto (opcional)</label>
-          <input id="recetaFoto" type="file" accept="image/*" class="input" onchange="recetaCargarFoto(event)" />
-          <img id="recetaPreview" class="mt-2 max-h-40 rounded-lg hidden" alt="Vista previa" />
-        </div>
-      </div>
-
-      <div class="flex justify-end gap-2 mt-4">
-        <button class="btn" onclick="cerrarModalReceta()">Cancelar</button>
-        <button class="btn btn-primary" onclick="guardarReceta()">Guardar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast -->
-  <div id="toast" class="fixed bottom-20 right-4 px-3 py-2 rounded-lg text-white bg-blue-600 shadow hidden">Hecho</div>
-
-  <!-- ========== SCRIPT ========== -->
-  <script>
-    // ---------- Estado y constantes ----------
-    const franjas = ["desayuno", "comida", "cena"];
-    const dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
-    const STORAGE_PREFIX = "planificadorComidas_";
-
-    let semanaActual = getStartOfWeek(new Date());
-    let comidaClipboard = null;
-    let franjaActual = null, diaActual = null; // para modal comida
-    let comidaPendienteBorrar = null; // para confirmar borrado
-    let recetaEditId = null; // para editar receta
-
-    // ---------- Utilidades ----------
-    function getStartOfWeek(date) {
-      const d = new Date(date);
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      d.setDate(diff); d.setHours(0,0,0,0);
-      return d;
-    }
-    function pad(n){ return String(n).padStart(2,'0'); }
-    function formatoFecha(d){
-      const dia=pad(d.getDate()), mes=pad(d.getMonth()+1), anio=d.getFullYear();
-      return `${dia}-${mes}-${anio}`;
-    }
-    function semanaKey(){ return STORAGE_PREFIX + "semana_" + formatoFecha(semanaActual); }
-    function getDataSemana(){ return JSON.parse(localStorage.getItem(semanaKey())) || {}; }
-    function setDataSemana(data){ localStorage.setItem(semanaKey(), JSON.stringify(data)); }
-    function showToast(msg='Hecho'){
-      const t=document.getElementById('toast');
-      t.textContent=msg; t.classList.remove('hidden');
-      clearTimeout(t._to); t._to=setTimeout(()=>t.classList.add('hidden'),1800);
-    }
-
-    // ---------- Tabs ----------
-    function showTab(id){
-      // sections
-      ['plan','recetas','chef','ajustes'].forEach(x=>{
-        document.getElementById('tab-'+x).classList.toggle('hidden', x!==id);
-        document.getElementById('nav-'+x).classList.toggle('active', x===id);
-      });
-      // defaults
-      if(id==='recetas') renderRecetas();
-    }
-
-    // ---------- Tema / Apariencia ----------
-    function aplicarTemaSaved(){
-      const pref=localStorage.getItem(STORAGE_PREFIX+'tema')||'system';
-      document.getElementById('temaSelect').value=pref;
-      applyTheme(pref);
-    }
-    function applyTheme(mode){
-      const html=document.documentElement;
-      if(mode==='dark'){ html.classList.add('dark'); }
-      else if(mode==='light'){ html.classList.remove('dark'); }
-      else {
-        // system
-        const media=window.matchMedia('(prefers-color-scheme: dark)');
-        media.onchange=()=>applyTheme('system');
-        if(media.matches) html.classList.add('dark'); else html.classList.remove('dark');
-      }
-      localStorage.setItem(STORAGE_PREFIX+'tema', mode);
-    }
-    function cambiarTemaSelect(v){ applyTheme(v); }
-
-    function cambiarColorCabecera(color){
-      document.documentElement.style.setProperty('--accent', color);
-      localStorage.setItem(STORAGE_PREFIX+'accent', color);
-    }
-    function syncTitulo(val){
-      document.getElementById('tituloEditable').textContent = val || 'Planificador de comidas';
-      guardarTitulo();
-    }
-    function guardarTitulo(){
-      const t=document.getElementById('tituloEditable').textContent.trim();
-      if(t) localStorage.setItem(STORAGE_PREFIX+'titulo', t);
-      document.getElementById('tituloInputMirror')?.value = t;
-    }
-    function cargarTitulo(){
-      const t=localStorage.getItem(STORAGE_PREFIX+'titulo');
-      if(t){
-        document.getElementById('tituloEditable').textContent=t;
-        const m=document.getElementById('tituloInputMirror'); if(m) m.value=t;
-      }
-    }
-
-    // ---------- Planificación: render tabla ----------
-    function renderTabla(){
-      const tbody=document.getElementById('tbody');
-      tbody.innerHTML='';
-      const data=getDataSemana();
-      const vis = getFranjasVisibles();
-
-      franjas.forEach(franja=>{
-        if(!vis[franja]) return;
-        const tr=document.createElement('tr');
-
-        const th=document.createElement('th');
-        th.className='p-3 text-left capitalize';
-        th.textContent=franja;
-        th.style.background='var(--accent)';
-        th.style.color='#fff';
-        tr.appendChild(th);
-
-        dias.forEach(dia=>{
-          const td=document.createElement('td');
-          td.className='align-top p-3';
-          td.tabIndex=0;
-          td.dataset.dia=dia; td.dataset.franja=franja;
-
-          const comida = data[dia]?.[franja];
-          if(comida?.nombre){
-            td.classList.add('td-filled','rounded');
-            td.innerHTML=`
-              <div class="font-semibold text-sm mb-1 break-words">${comida.nombre}</div>
-              <div class="flex flex-wrap gap-1 mb-2">
-                ${(comida.ingredientes||[]).slice(0,4).map(i=>`<span class="chip">${i}</span>`).join('')}
-                ${comida.ingredientes && comida.ingredientes.length>4 ? `<span class="chip">+${comida.ingredientes.length-4}</span>`:''}
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button class="btn btn-ghost border dark:border-zinc-800" data-act="copiar">Copiar</button>
-                <button class="btn btn-ghost border dark:border-zinc-800" data-act="editar">Editar</button>
-                <button class="btn btn-danger" data-act="borrar">Borrar</button>
-              </div>
-            `;
-          } else {
-            td.innerHTML=`
-              <div class="opacity-60 italic text-sm mb-2">Vacío</div>
-              <div class="flex flex-wrap gap-2">
-                <button class="btn btn-primary" data-act="nuevo">+ Añadir</button>
-                ${comidaClipboard ? '<button class="btn btn-ghost border dark:border-zinc-800" data-act="pegar">Pegar</button>' : ''}
-              </div>
-            `;
-          }
-
-          td.addEventListener('click', (e)=>{
-            const act=e.target?.dataset?.act;
-            if(!act) return;
-            if(act==='editar' || act==='nuevo'){
-              abrirModalComida(dia, franja, comida||{nombre:'', ingredientes:[]});
-            } else if(act==='borrar'){
-              abrirModalConfirmar(dia, franja);
-            } else if(act==='copiar'){
-              comidaClipboard = JSON.parse(JSON.stringify(comida));
-              showToast('Comida copiada');
-              renderTabla();
-            } else if(act==='pegar'){
-              if(!comidaClipboard) return;
-              const d=getDataSemana();
-              d[dia] = d[dia]||{};
-              d[dia][franja]=JSON.parse(JSON.stringify(comidaClipboard));
-              setDataSemana(d);
-              comidaClipboard=null;
-              renderTabla();
-            }
-          });
-
-          tr.appendChild(td);
-        });
-
-        tbody.appendChild(tr);
-      });
-
-      actualizarRangoSemana();
-    }
-
-    function cambiarSemana(n){
-      semanaActual.setDate(semanaActual.getDate() + n*7);
-      renderTabla();
-    }
-    function actualizarRangoSemana(){
-      const fin=new Date(semanaActual); fin.setDate(fin.getDate()+6);
-      document.getElementById('rangoSemana').textContent = `${formatoFecha(semanaActual)} - ${formatoFecha(fin)}`;
-    }
-
-    // ---------- Franjas visibles (ajustes) ----------
-    function getFranjasVisibles(){
-      const def={desayuno:true, comida:true, cena:true};
-      try { return JSON.parse(localStorage.getItem(STORAGE_PREFIX+'franjasVisibles')) || def; }
-      catch(e){ return def; }
-    }
-    function setFranjasVisibles(vis){
-      localStorage.setItem(STORAGE_PREFIX+'franjasVisibles', JSON.stringify(vis));
-      renderTabla();
-    }
-
-    // ---------- Modal Comida ----------
-    function abrirModalComida(dia, franja, comida){
-      diaActual=dia; franjaActual=franja;
-      // Prefill manual
-      document.getElementById('inputNombre').value = comida?.nombre || '';
-      cargarIngredientesModal(comida?.ingredientes || []);
-      // Modal recetas
-      document.getElementById('buscarRecetaModal').value='';
-      renderRecetasEnModal();
-
-      setModalTab('manual');
-      openModal('modalComida');
-      setTimeout(()=>document.getElementById('inputNombre').focus(),50);
-    }
-    function cerrarModalComida(){ closeModal('modalComida'); }
-
-    function setModalTab(which){
-      document.getElementById('modalManual').classList.toggle('hidden', which!=='manual');
-      document.getElementById('modalElegirReceta').classList.toggle('hidden', which!=='recetas');
-      document.getElementById('tabManualBtn').classList.toggle('bg-black/5', which==='manual');
-      document.getElementById('tabRecetasBtn').classList.toggle('bg-black/5', which==='recetas');
-      document.getElementById('tabManualBtn').classList.toggle('dark:bg-white/10', which==='manual');
-      document.getElementById('tabRecetasBtn').classList.toggle('dark:bg-white/10', which==='recetas');
-    }
-
-    function cargarIngredientesModal(arr){
-      const cont=document.getElementById('ingredientesList');
-      cont.innerHTML='';
-      arr.forEach((ing,i)=>{
-        const row=document.createElement('div');
-        row.className='flex items-center gap-2';
-        row.innerHTML=`
-          <input class="input" value="${escapeHtml(ing)}" />
-          <button class="btn btn-danger">✖</button>
-        `;
-        row.querySelector('button').onclick=()=>row.remove();
-        cont.appendChild(row);
-      });
-    }
-    function agregarIngrediente(){
-      const cont=document.getElementById('ingredientesList');
-      const row=document.createElement('div');
-      row.className='flex items-center gap-2';
-      row.innerHTML=`
-        <input class="input" placeholder="Ingrediente" />
-        <button class="btn btn-danger">✖</button>
-      `;
-      row.querySelector('button').onclick=()=>row.remove();
-      cont.appendChild(row);
-      row.querySelector('input').focus();
-    }
-
-    function guardarComida(){
-      if(!diaActual || !franjaActual) return;
-      const nombre=document.getElementById('inputNombre').value.trim();
-      if(!nombre){ showToast('Añade un nombre'); return; }
-
-      const ings = [...document.querySelectorAll('#ingredientesList input')]
-        .map(i=>i.value.trim()).filter(Boolean);
-
-      const d=getDataSemana();
-      d[diaActual] = d[diaActual] || {};
-      d[diaActual][franjaActual] = { nombre, ingredientes: ings };
-      setDataSemana(d);
-      cerrarModalComida(); renderTabla(); showToast('Comida guardada');
-    }
-
-    // Elegir receta guardada en el modal
-    function renderRecetasEnModal(){
-      const q = document.getElementById('buscarRecetaModal').value.toLowerCase().trim();
-      const cont = document.getElementById('listaRecetasModal');
-      cont.innerHTML='';
-      const recetas = getRecetas();
-      const fil = recetas.filter(r=>{
-        const h = (r.nombre||'').toLowerCase();
-        const d = (r.desc||'').toLowerCase();
-        const ing = (r.ing||[]).join(' ').toLowerCase();
-        return !q || h.includes(q) || d.includes(q) || ing.includes(q);
-      });
-      if(fil.length===0){
-        cont.innerHTML = `<p class="text-sm opacity-70">No hay resultados.</p>`;
-        return;
-      }
-      fil.forEach(r=>{
-        const card=document.createElement('div');
-        card.className='border dark:border-zinc-800 rounded-lg p-3 flex items-center gap-3';
-        const img = r.foto ? `<img src="${r.foto}" class="w-16 h-16 object-cover rounded-lg border dark:border-zinc-800" alt="${escapeHtml(r.nombre)}"/>` : `<div class="w-16 h-16 rounded-lg bg-black/5 dark:bg-white/10 flex items-center justify-center">🍽️</div>`;
-        card.innerHTML=`
-          ${img}
-          <div class="flex-1">
-            <div class="font-semibold">${escapeHtml(r.nombre||'Sin título')}</div>
-            <div class="text-xs opacity-70 line-clamp-2">${escapeHtml(r.desc||'')}</div>
+      <div class="modal-body">
+        <div class="todo">
+          <div class="todo-head">
+            <input class="input" id="newItemInput" placeholder="Añadir artículo…" />
+            <button class="btn" id="addItemBtn">Añadir</button>
+            <button class="btn ghost" id="regenFromMealsBtn" title="Regenerar a partir de la semana">🛒 Generar</button>
+            <button class="btn ghost" id="clearDoneBtn" title="Eliminar marcados">🧹 Limpiar</button>
           </div>
-          <button class="btn btn-primary">Usar</button>
-        `;
-        card.querySelector('button').onclick=()=>{
-          // Rellenar los campos manuales con la receta para poder “Guardar”
-          document.getElementById('inputNombre').value = r.nombre || '';
-          const contIng=document.getElementById('ingredientesList');
-          contIng.innerHTML='';
-          (r.ing||[]).forEach(ing=>{
-            const row=document.createElement('div');
-            row.className='flex items-center gap-2';
-            row.innerHTML=`
-              <input class="input" value="${escapeHtml(ing)}" />
-              <button class="btn btn-danger">✖</button>
-            `;
-            row.querySelector('button').onclick=()=>row.remove();
-            contIng.appendChild(row);
-          });
-          setModalTab('manual');
-          showToast('Receta cargada en el formulario');
-        };
-        cont.appendChild(card);
-      });
-    }
+          <div class="todo-list" id="todoList"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" data-close="shoppingDialog">Cerrar</button>
+      </div>
+    </div>
+  </dialog>
 
-    function abrirModalConfirmar(dia, franja){
-      comidaPendienteBorrar = {dia, franja};
-      openModal('modalConfirmar');
-    }
-    function cerrarModalConfirmar(){ closeModal('modalConfirmar'); }
-    function confirmarBorrado(){
-      if(!comidaPendienteBorrar) return;
-      const {dia, franja} = comidaPendienteBorrar;
-      const d=getDataSemana();
-      if(d[dia]){
-        delete d[dia][franja];
-        if(Object.keys(d[dia]).length===0) delete d[dia];
-        setDataSemana(d);
-      }
-      cerrarModalConfirmar(); renderTabla(); showToast('Comida eliminada');
-    }
+  <!-- Tiny toast -->
+  <dialog id="toast" style="padding:10px 14px; border-radius:12px; background: var(--card); border:1px solid color-mix(in srgb, var(--fg) 10%, transparent)"></dialog>
 
-    function vaciarSemanaModal(){
-      // Reutilizamos confirm modal con flag especial
-      comidaPendienteBorrar = { all:true };
-      document.querySelector('#modalConfirmar h3').textContent='¿Vaciar semana?';
-      document.querySelector('#modalConfirmar p').textContent='Eliminará todas las franjas de esta semana.';
-      openModal('modalConfirmar');
+<script>
+(() => {
+  /* -------------------------- Utilities & Storage -------------------------- */
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => Array.from(document.querySelectorAll(sel));
+  const storage = {
+    get(key, fallback){
+      try{
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      }catch{ return fallback }
+    },
+    set(key, value){
+      localStorage.setItem(key, JSON.stringify(value));
     }
+  };
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  const todayISO = () => new Date().toISOString().slice(0,10);
 
-    // Sobrecarga para vaciar todo al confirmar
-    const _confirmarOriginal = confirmarBorrado;
-    confirmarBorrado = function(){
-      if(comidaPendienteBorrar?.all){
-        localStorage.removeItem(semanaKey());
-        cerrarModalConfirmar(); renderTabla(); showToast('Semana vaciada');
-        // restaurar textos
-        document.querySelector('#modalConfirmar h3').textContent='¿Eliminar comida?';
-        document.querySelector('#modalConfirmar p').textContent='Esta acción no se puede deshacer.';
-        comidaPendienteBorrar=null;
-        return;
-      }
-      // si no es vaciado total, ejecutar original
-      const {dia, franja} = comidaPendienteBorrar || {};
-      if(!dia || !franja){ cerrarModalConfirmar(); return; }
-      const d=getDataSemana();
-      if(d[dia]){
-        delete d[dia][franja];
-        if(Object.keys(d[dia]).length===0) delete d[dia];
-        setDataSemana(d);
-      }
-      cerrarModalConfirmar(); renderTabla(); showToast('Comida eliminada');
-    }
+  /* ------------------------------ Global State ----------------------------- */
+  const state = {
+    weekOffset: 0,            // 0 = current week
+    clipboard: null,          // {type:'recipe'|'manual', payload:{}}
+    settings: storage.get('settings', {
+      dark: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) || false,
+      primary: getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#6c7cff',
+      show: { breakfast:true, lunch:true, dinner:true }
+    }),
+    banner: storage.get('banner', 'Planificador semanal'),
+    recipes: storage.get('recipes', sampleRecipes()),
+    planner: storage.get('planner', {}), // { [weekKey]: { [dayKey]: { breakfast|lunch|dinner: Entry|null } } }
+    shopping: storage.get('shopping', {}) // { [weekKey]: [ {text, done} ] }
+  };
 
-    // ---------- Lista de la compra ----------
-    function getCompra(){ return JSON.parse(localStorage.getItem(STORAGE_PREFIX+'compra')) || []; }
-    function setCompra(a){ localStorage.setItem(STORAGE_PREFIX+'compra', JSON.stringify(a)); }
-    function abrirModalCompra(){
-      renderCompra();
-      openModal('modalCompra');
-      setTimeout(()=>document.getElementById('inputCompra').focus(),50);
-    }
-    function cerrarModalCompra(){ closeModal('modalCompra'); }
+  /* ----------------------------- Sample Content ---------------------------- */
+  function sampleRecipes(){
+    return [
+      { id: uid(), name:'Avena con fruta', desc:'Avena rápida con plátano y miel.', ingredients:['avena','leche','plátano','miel','canela'], photo:'' },
+      { id: uid(), name:'Ensalada mediterránea', desc:'Tomate, pepino, aceitunas y feta.', ingredients:['tomate','pepino','aceitunas','queso feta','aceite de oliva'], photo:'' },
+      { id: uid(), name:'Pasta al pesto', desc:'Pasta con pesto de albahaca.', ingredients:['pasta','albahaca','piñones','ajo','parmesano','aceite de oliva'], photo:'' }
+    ];
+  }
 
-    function addCompraItem(){
-      const inp=document.getElementById('inputCompra');
-      const txt=inp.value.trim(); if(!txt) return;
-      const items=getCompra();
-      items.push({id:crypto.randomUUID(), txt, done:false});
-      setCompra(items); inp.value=''; renderCompra();
-    }
-    function toggleCompra(id){
-      const items=getCompra().map(it=>it.id===id?({...it, done:!it.done}):it);
-      setCompra(items); renderCompra();
-    }
-    function delCompra(id){
-      const items=getCompra().filter(it=>it.id!==id);
-      setCompra(items); renderCompra();
-    }
-    function borrarMarcadosCompra(){
-      const items=getCompra().filter(it=>!it.done);
-      setCompra(items); renderCompra();
-    }
-    function borrarTodoCompra(){
-      setCompra([]); renderCompra();
-    }
-    function renderCompra(){
-      const cont=document.getElementById('listaCompraContenido');
-      const items=getCompra();
-      cont.innerHTML='';
-      if(items.length===0){
-        cont.innerHTML='<p class="text-sm opacity-70">Tu lista está vacía.</p>'; return;
-      }
-      items.forEach(it=>{
-        const row=document.createElement('div');
-        row.className='flex items-center gap-2';
-        row.innerHTML=`
-          <input type="checkbox" class="scale-125" ${it.done?'checked':''}/>
-          <div class="flex-1 ${it.done?'line-through opacity-60':''}">${escapeHtml(it.txt)}</div>
-          <button class="btn btn-ghost" title="Eliminar">🗑️</button>
-        `;
-        row.querySelector('input').onchange=()=>toggleCompra(it.id);
-        row.querySelector('button').onclick=()=>delCompra(it.id);
-        cont.appendChild(row);
-      });
-    }
+  /* ------------------------------ Theme Apply ------------------------------ */
+  function applySettings(){
+    document.documentElement.style.setProperty('--primary', state.settings.primary);
+    document.documentElement.classList.toggle('dark', !!state.settings.dark);
+    $('#toggleDark').checked = !!state.settings.dark;
+    $('#colorPicker').value = toHex(state.settings.primary) || '#6c7cff';
+    $('#showBreakfast').checked = !!state.settings.show.breakfast;
+    $('#showLunch').checked = !!state.settings.show.lunch;
+    $('#showDinner').checked = !!state.settings.show.dinner;
+  }
+  function toHex(c){
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.fillStyle = c; // browser normalizes any valid color string to rgb(a)
+    const rgb = ctx.fillStyle.match(/\d+/g);
+    if(!rgb) return null;
+    const [r,g,b] = rgb.map(n => parseInt(n,10));
+    const hex = '#' + [r,g,b].map(n => n.toString(16).padStart(2,'0')).join('');
+    return hex;
+  }
 
-    // ---------- Recetas ----------
-    function getRecetas(){ return JSON.parse(localStorage.getItem(STORAGE_PREFIX+'recetas')) || []; }
-    function setRecetas(a){ localStorage.setItem(STORAGE_PREFIX+'recetas', JSON.stringify(a)); }
-    function abrirModalNuevaReceta(){
-      recetaEditId=null;
-      document.getElementById('recetaModalTitulo').textContent='Nueva receta';
-      document.getElementById('recetaNombre').value='';
-      document.getElementById('recetaDesc').value='';
-      document.getElementById('recetaIngList').innerHTML='';
-      recetaAgregarIng();
-      document.getElementById('recetaFoto').value='';
-      document.getElementById('recetaPreview').classList.add('hidden');
-      document.getElementById('recetaPreview').src='';
-      openModal('modalReceta');
-      setTimeout(()=>document.getElementById('recetaNombre').focus(),50);
-    }
-    function abrirModalEditarReceta(id){
-      const r=getRecetas().find(x=>x.id===id); if(!r) return;
-      recetaEditId=id;
-      document.getElementById('recetaModalTitulo').textContent='Editar receta';
-      document.getElementById('recetaNombre').value=r.nombre||'';
-      document.getElementById('recetaDesc').value=r.desc||'';
-      const list=document.getElementById('recetaIngList'); list.innerHTML='';
-      (r.ing||[]).forEach(v=>{
-        const row=document.createElement('div');
-        row.className='flex items-center gap-2';
-        row.innerHTML=`<input class="input" value="${escapeHtml(v)}"/><button class="btn btn-danger">✖</button>`;
-        row.querySelector('button').onclick=()=>row.remove();
-        list.appendChild(row);
-      });
-      if((r.ing||[]).length===0) recetaAgregarIng();
-      const prev=document.getElementById('recetaPreview');
-      if(r.foto){ prev.src=r.foto; prev.classList.remove('hidden'); } else { prev.src=''; prev.classList.add('hidden'); }
-      document.getElementById('recetaFoto').value='';
-      openModal('modalReceta');
-    }
-    function cerrarModalReceta(){ closeModal('modalReceta'); }
-    function recetaAgregarIng(){
-      const list=document.getElementById('recetaIngList');
-      const row=document.createElement('div');
-      row.className='flex items-center gap-2';
-      row.innerHTML=`<input class="input" placeholder="Ingrediente"/><button class="btn btn-danger">✖</button>`;
-      row.querySelector('button').onclick=()=>row.remove();
-      list.appendChild(row);
-    }
-    function recetaCargarFoto(evt){
-      const file=evt.target.files[0]; if(!file) return;
-      const reader=new FileReader();
-      reader.onload=()=>{
-        const img=document.getElementById('recetaPreview');
-        img.src=reader.result; img.classList.remove('hidden');
-      };
-      reader.readAsDataURL(file);
-    }
-    function guardarReceta(){
-      const nombre=document.getElementById('recetaNombre').value.trim();
-      if(!nombre){ showToast('Pon un nombre'); return; }
-      const desc=document.getElementById('recetaDesc').value.trim();
-      const ing=[...document.querySelectorAll('#recetaIngList input')].map(i=>i.value.trim()).filter(Boolean);
-      const foto=document.getElementById('recetaPreview').src || '';
+  /* ------------------------------ Tabs Switch ------------------------------ */
+  const views = {
+    planner: $('#view-planner'),
+    recipes: $('#view-recipes'),
+    chef: $('#view-chef'),
+    settings: $('#view-settings')
+  };
+  $$('.tabs .tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      $$('.tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      Object.values(views).forEach(v=>v.classList.remove('active'));
+      views[tab].classList.add('active');
+      if(tab==='recipes') renderRecipes();
+      if(tab==='planner') renderPlanner();
+    });
+  });
 
-      const recetas=getRecetas();
-      if(recetaEditId){
-        const i=recetas.findIndex(x=>x.id===recetaEditId);
-        if(i>=0) recetas[i]={...recetas[i], nombre, desc, ing, foto: (foto.startsWith('data:')?foto:'')};
-      } else {
-        recetas.push({id:crypto.randomUUID(), nombre, desc, ing, foto: (foto.startsWith('data:')?foto:'')});
-      }
-      setRecetas(recetas);
-      cerrarModalReceta(); renderRecetas(); showToast('Receta guardada');
+  /* ------------------------------- Banner edit ----------------------------- */
+  const bannerEl = $('#banner');
+  bannerEl.textContent = state.banner;
+  bannerEl.addEventListener('input', ()=>{
+    state.banner = bannerEl.textContent.trim() || 'Planificador semanal';
+    storage.set('banner', state.banner);
+  });
+
+  /* ----------------------------- Week Helpers ------------------------------ */
+  // Get Monday of week (based on current date + offset weeks)
+  function getWeekStart(offset=0){
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const day = d.getDay(); // 0 Sun - 6 Sat
+    const diffToMonday = (day===0 ? -6 : 1 - day);
+    d.setDate(d.getDate() + diffToMonday + offset*7);
+    d.setHours(0,0,0,0);
+    return d;
+  }
+  const DAY_NAMES = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  function formatDate(d){ return d.toISOString().slice(0,10); }
+  function weekKeyOf(date){ // YYYY-Www (ISO-ish)
+    const tmp = new Date(date.getTime());
+    tmp.setHours(0,0,0,0);
+    // Thursday in current week decides the week number per ISO-8601
+    tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay()+6)%7));
+    const week1 = new Date(tmp.getFullYear(),0,4);
+    const weekNo = 1 + Math.round(((tmp.getTime() - week1.getTime())/86400000 - 3 + ((week1.getDay()+6)%7))/7);
+    return `${tmp.getFullYear()}-W${String(weekNo).padStart(2,'0')}`;
+  }
+
+  /* ------------------------------ Planner Render --------------------------- */
+  const MEALS = ['breakfast','lunch','dinner'];
+  const MEAL_LABEL = { breakfast:'Desayuno', lunch:'Comida', dinner:'Cena' };
+
+  function ensureWeekData(weekKey){
+    if(!state.planner[weekKey]) state.planner[weekKey] = {};
+    const monday = getWeekStart(state.weekOffset);
+    for(let i=0;i<7;i++){
+      const date = new Date(monday); date.setDate(date.getDate()+i);
+      const dayKey = formatDate(date);
+      if(!state.planner[weekKey][dayKey]) state.planner[weekKey][dayKey] = { breakfast:null, lunch:null, dinner:null };
     }
-    function borrarReceta(id){
-      // Si una comida de la semana tenía ese nombre, no lo tocamos: las comidas guardan texto e ingredientes propios en el momento.
-      const recetas=getRecetas().filter(r=>r.id!==id);
-      setRecetas(recetas); renderRecetas(); showToast('Receta eliminada');
-    }
-    function compartirReceta(id){
-      const r=getRecetas().find(x=>x.id===id); if(!r) return;
-      const texto = `🍽️ ${r.nombre}\n\n${r.desc? r.desc+'\n\n':''}Ingredientes:\n- ${(r.ing||[]).join('\n- ')}`;
-      if(navigator.share){
-        navigator.share({title:r.nombre, text:texto}).catch(()=>{});
-      } else {
-        navigator.clipboard.writeText(texto).then(()=>showToast('Receta copiada'));
-      }
-    }
-    function renderRecetas(){
-      const cont=document.getElementById('listaRecetas');
-      const none=document.getElementById('sinRecetas');
-      const q=(document.getElementById('buscadorRecetas').value||'').toLowerCase().trim();
-      const recetas=getRecetas().filter(r=>{
-        const h=(r.nombre||'').toLowerCase();
-        const d=(r.desc||'').toLowerCase();
-        const ing=(r.ing||[]).join(' ').toLowerCase();
-        return !q || h.includes(q)||d.includes(q)||ing.includes(q);
-      });
-      cont.innerHTML='';
-      none.classList.toggle('hidden', recetas.length>0);
-      recetas.forEach(r=>{
-        const card=document.createElement('div');
-        card.className='rounded-xl overflow-hidden border dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow';
-        card.innerHTML=`
-          <div class="h-36 bg-black/5 dark:bg-white/10 flex items-center justify-center overflow-hidden">
-            ${r.foto ? `<img src="${r.foto}" class="w-full h-36 object-cover" alt="${escapeHtml(r.nombre)}"/>` : '<div class="text-4xl">🍽️</div>'}
+    storage.set('planner', state.planner);
+  }
+
+  function renderPlanner(){
+    const start = getWeekStart(state.weekOffset);
+    const end = new Date(start); end.setDate(end.getDate()+6);
+    const weekKey = weekKeyOf(start);
+    ensureWeekData(weekKey);
+
+    $('#weekLabel').textContent = `Semana ${weekKey.split('W')[1]}`;
+    $('#weekRange').textContent = `${start.toLocaleDateString('es-ES', { day:'2-digit', month:'short'})} — ${end.toLocaleDateString('es-ES', { day:'2-digit', month:'short'})}`;
+
+    // Build table
+    const show = state.settings.show;
+    const activeMeals = MEALS.filter(m => show[m]);
+    const thead = `<thead><tr>
+      <th class="meal-col">Franja</th>
+      ${[...Array(7)].map((_,i)=>{
+        const d = new Date(start); d.setDate(d.getDate()+i);
+        const isToday = formatDate(d)===todayISO();
+        return `<th>${DAY_NAMES[i]}<br><span class="helper" style="${isToday?'color:var(--primary); font-weight:800':''}">${d.toLocaleDateString('es-ES',{ day:'2-digit', month:'short'})}${isToday?' • hoy':''}</span></th>`;
+      }).join('')}
+    </tr></thead>`;
+
+    const tbodyRows = activeMeals.map(meal=>{
+      const cells = [...Array(7)].map((_,i)=>{
+        const d = new Date(start); d.setDate(d.getDate()+i);
+        const dayKey = formatDate(d);
+        const entry = state.planner[weekKey][dayKey][meal];
+        const { name, meta } = displayForEntry(entry);
+        return `<td class="slot">
+          <div class="cell" data-day="${dayKey}" data-meal="${meal}" title="Toca para editar">
+            <div class="name">${name || '<span class="helper">— vacío —</span>'}</div>
+            <div class="meta">${meta || ''}</div>
           </div>
-          <div class="p-3 space-y-2">
-            <div class="font-semibold">${escapeHtml(r.nombre||'Sin título')}</div>
-            <div class="text-sm opacity-80 min-h-10">${escapeHtml(r.desc||'')}</div>
-            <div class="flex flex-wrap gap-1">
-              ${(r.ing||[]).slice(0,5).map(i=>`<span class="chip">${escapeHtml(i)}</span>`).join('')}
-              ${r.ing && r.ing.length>5 ? `<span class="chip">+${r.ing.length-5}</span>`:''}
-            </div>
-            <div class="flex justify-end gap-2 pt-2">
-              <button class="btn btn-ghost border dark:border-zinc-700" title="Compartir">🔗</button>
-              <button class="btn btn-ghost border dark:border-zinc-700" title="Editar">✏️</button>
-              <button class="btn btn-danger" title="Borrar">🗑️</button>
-            </div>
-          </div>
-        `;
-        const [btnShare, btnEdit, btnDel] = card.querySelectorAll('button');
-        btnShare.onclick=()=>compartirReceta(r.id);
-        btnEdit.onclick=()=>abrirModalEditarReceta(r.id);
-        btnDel.onclick=()=>borrarReceta(r.id);
-        cont.appendChild(card);
-      });
-    }
+        </td>`;
+      }).join('');
+      return `<tr><th scope="row">${MEAL_LABEL[meal]}</th>${cells}</tr>`;
+    }).join('');
 
-    // ---------- Exportar / Importar / Reset ----------
-    function exportarDatos(){
-      const data = {};
-      for(let i=0;i<localStorage.length;i++){
-        const k=localStorage.key(i);
-        if(k.startsWith(STORAGE_PREFIX)){
-          data[k]=localStorage.getItem(k);
+    $('#plannerTable').innerHTML = thead + `<tbody>${tbodyRows}</tbody>`;
+
+    // bind cell clicks
+    $$('#plannerTable .cell').forEach(cell=>{
+      cell.addEventListener('click', ()=> openCellDialog(cell.dataset.day, cell.dataset.meal));
+    });
+  }
+
+  function displayForEntry(entry){
+    if(!entry) return { name:'', meta:'' };
+    if(entry.type==='recipe'){
+      const r = state.recipes.find(x=>x.id===entry.id);
+      if(r) return { name:r.name, meta:r.ingredients.slice(0,4).join(', ') + (r.ingredients.length>4?'…':'') };
+      return { name:'(receta eliminada)', meta:'' };
+    }else if(entry.type==='manual'){
+      return { name: entry.name, meta: (entry.ingredients||[]).join(', ') };
+    }
+    return { name:'', meta:'' };
+  }
+
+  /* --------------------------- Planner interactions ------------------------ */
+  $('#prevWeek').addEventListener('click', ()=>{ state.weekOffset--; renderPlanner(); });
+  $('#nextWeek').addEventListener('click', ()=>{ state.weekOffset++; renderPlanner(); });
+  $('#btnToday').addEventListener('click', ()=>{ state.weekOffset=0; renderPlanner(); });
+  $('#btnClearWeek').addEventListener('click', ()=>{
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    if(!state.planner[wk]) return;
+    Object.keys(state.planner[wk]).forEach(day=>{
+      MEALS.forEach(m=> state.planner[wk][day][m] = null);
+    });
+    storage.set('planner', state.planner);
+    renderPlanner();
+    toast('Semana vaciada');
+  });
+
+  /* ------------------------------ Cell dialog ------------------------------ */
+  let currentCell = { day:null, meal:null };
+  function openCellDialog(day, meal){
+    currentCell = { day, meal };
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    const entry = state.planner[wk][day][meal];
+    const { name, meta } = displayForEntry(entry);
+    $('#cellDialogTitle').textContent = `${MEAL_LABEL[meal]} • ${new Date(day).toLocaleDateString('es-ES',{ weekday:'short', day:'2-digit', month:'short'})}`;
+    $('#cellCurrent').innerHTML = entry ? `<strong>${name}</strong><br><span class="helper">${meta}</span>` : '<span class="helper">Sin contenido</span>';
+    $('#manualForm').style.display = 'none';
+    $('#cellPaste').disabled = !state.clipboard;
+
+    openModal('cellDialog');
+  }
+  $('#cellSelectRecipe').addEventListener('click', ()=>{
+    renderPicker();
+    openModal('pickerDialog');
+  });
+  $('#cellAddManual').addEventListener('click', ()=>{
+    $('#manualName').value=''; $('#manualIngr').value='';
+    $('#manualForm').style.display = 'grid';
+  });
+  $('#manualCancel').addEventListener('click', ()=> $('#manualForm').style.display='none');
+  $('#manualForm').addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const name = $('#manualName').value.trim();
+    const ing = $('#manualIngr').value.split(/,|\n/).map(s=>s.trim()).filter(Boolean);
+    if(!name) return;
+    setCurrentCell({ type:'manual', name, ingredients: ing });
+    closeModal('cellDialog');
+  });
+  $('#cellCopy').addEventListener('click', ()=>{
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    const entry = state.planner[wk][currentCell.day][currentCell.meal];
+    if(!entry){ toast('Nada que copiar'); return; }
+    state.clipboard = JSON.parse(JSON.stringify(entry));
+    toast('Copiado ✓');
+  });
+  $('#cellPaste').addEventListener('click', ()=>{
+    if(!state.clipboard){ toast('Portapapeles vacío'); return; }
+    setCurrentCell(state.clipboard);
+    closeModal('cellDialog');
+  });
+  $('#cellClear').addEventListener('click', ()=>{
+    setCurrentCell(null);
+    closeModal('cellDialog');
+  });
+
+  function setCurrentCell(entry){
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    ensureWeekData(wk);
+    state.planner[wk][currentCell.day][currentCell.meal] = entry ? JSON.parse(JSON.stringify(entry)) : null;
+    storage.set('planner', state.planner);
+    renderPlanner();
+    toast(entry ? 'Guardado' : 'Eliminado');
+  }
+
+  /* ------------------------------ Picker modal ----------------------------- */
+  function renderPicker(){
+    const list = $('#pickerList'); list.innerHTML='';
+    const q = ($('#pickerSearch').value||'').toLowerCase();
+    const results = state.recipes.filter(r=>{
+      const haystack = (r.name+' '+r.desc+' '+(r.ingredients||[]).join(' ')).toLowerCase();
+      return haystack.includes(q);
+    });
+    for(const r of results){
+      const card = document.createElement('div'); card.className='card';
+      const img = document.createElement('img'); img.className='thumb'; img.alt=r.name; img.src = r.photo || placeholderFor(r.name);
+      const body = document.createElement('div'); body.className='card-body';
+      body.innerHTML = `<div class="card-title">${r.name}</div><div class="card-meta">${r.ingredients.slice(0,4).join(', ')}${r.ingredients.length>4?'…':''}</div>`;
+      const actions = document.createElement('div'); actions.className='card-actions';
+      const choose = document.createElement('button'); choose.className='btn'; choose.textContent='Elegir';
+      choose.addEventListener('click', ()=>{
+        setCurrentCell({ type:'recipe', id:r.id });
+        closeModal('pickerDialog'); closeModal('cellDialog');
+      });
+      const share = document.createElement('button'); share.className='btn ghost'; share.textContent='Compartir';
+      share.addEventListener('click', ()=> shareRecipe(r));
+      actions.appendChild(choose); actions.appendChild(share);
+      card.appendChild(img); card.appendChild(body); card.appendChild(actions);
+      list.appendChild(card);
+    }
+  }
+  $('#pickerSearch').addEventListener('input', renderPicker);
+
+  /* -------------------------------- Recipes UI ----------------------------- */
+  function renderRecipes(){
+    const wrap = $('#recipesList'); wrap.innerHTML='';
+    const q = ($('#recipeSearch').value||'').toLowerCase();
+    const filtered = state.recipes.filter(r=>{
+      const hay = (r.name+' '+r.desc+' '+(r.ingredients||[]).join(' ')).toLowerCase();
+      return hay.includes(q);
+    });
+    if(filtered.length===0){
+      wrap.innerHTML = `<div class="helper" style="padding:14px">No hay recetas. Crea la primera con “Nueva receta”.</div>`;
+      return;
+    }
+    for(const r of filtered){
+      const card = document.createElement('div'); card.className='card';
+      const img = document.createElement('img'); img.className='thumb'; img.alt=r.name; img.loading='lazy';
+      img.src = r.photo || placeholderFor(r.name);
+      const body = document.createElement('div'); body.className='card-body';
+      body.innerHTML = `<div class="card-title">${r.name}</div><div class="card-meta">${r.desc||'Sin descripción'}</div>`;
+      const actions = document.createElement('div'); actions.className='card-actions';
+      const useBtn = document.createElement('button'); useBtn.className='btn'; useBtn.textContent='Usar en semana';
+      useBtn.addEventListener('click', ()=>{
+        // Quick-add: put into first empty cell (today forward)
+        quickAssignRecipe(r.id);
+      });
+      const shareBtn = document.createElement('button'); shareBtn.className='btn ghost'; shareBtn.textContent='Compartir';
+      shareBtn.addEventListener('click', ()=> shareRecipe(r));
+      const editBtn = document.createElement('button'); editBtn.className='btn ghost'; editBtn.textContent='Editar';
+      editBtn.addEventListener('click', ()=> openRecipeDialog(r));
+      const delBtn = document.createElement('button'); delBtn.className='btn ghost'; delBtn.textContent='Eliminar';
+      delBtn.addEventListener('click', ()=> deleteRecipe(r.id));
+      actions.append(useBtn, shareBtn, editBtn, delBtn);
+      card.append(img, body, actions);
+      wrap.appendChild(card);
+    }
+  }
+  $('#recipeSearch').addEventListener('input', renderRecipes);
+  $('#btnNewRecipe').addEventListener('click', ()=> openRecipeDialog());
+
+  function openRecipeDialog(recipe){
+    $('#recipeDialogTitle').textContent = recipe ? 'Editar receta' : 'Nueva receta';
+    $('#rId').value = recipe ? recipe.id : '';
+    $('#rName').value = recipe ? recipe.name : '';
+    $('#rDesc').value = recipe ? recipe.desc : '';
+    $('#rIngr').value = recipe ? (recipe.ingredients||[]).join('\n') : '';
+    $('#rPhotoUrl').value = recipe ? (recipe.photo || '') : '';
+    $('#rPhotoFile').value = '';
+    openModal('recipeDialog');
+  }
+  $('#rPhotoFile').addEventListener('change', async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const dataUrl = await fileToDataURL(file);
+    $('#rPhotoUrl').value = dataUrl;
+  });
+  async function fileToDataURL(file){
+    return new Promise(res=>{
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.readAsDataURL(file);
+    });
+  }
+  $('#saveRecipe').addEventListener('click', (e)=>{
+    e.preventDefault();
+    const id = $('#rId').value || uid();
+    const name = $('#rName').value.trim();
+    if(!name){ toast('Pon un nombre'); return; }
+    const desc = $('#rDesc').value.trim();
+    const ingredients = $('#rIngr').value.split(/,|\n/).map(s=>s.trim()).filter(Boolean);
+    const photo = $('#rPhotoUrl').value.trim();
+    const idx = state.recipes.findIndex(r=>r.id===id);
+    const rec = { id, name, desc, ingredients, photo };
+    if(idx>=0) state.recipes[idx]=rec; else state.recipes.unshift(rec);
+    storage.set('recipes', state.recipes);
+    closeModal('recipeDialog');
+    renderRecipes();
+    toast('Receta guardada');
+  });
+  function deleteRecipe(id){
+    state.recipes = state.recipes.filter(r=>r.id!==id);
+    storage.set('recipes', state.recipes);
+    renderRecipes();
+    toast('Receta eliminada');
+  }
+  function quickAssignRecipe(recipeId){
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    ensureWeekData(wk);
+    const start = getWeekStart(state.weekOffset);
+    // try from today forward
+    for(let i=0;i<7;i++){
+      const d = new Date(start); d.setDate(d.getDate()+i);
+      const dayKey = formatDate(d);
+      for(const meal of MEALS){
+        if(!state.settings.show[meal]) continue;
+        if(!state.planner[wk][dayKey][meal]){
+          state.planner[wk][dayKey][meal] = { type:'recipe', id: recipeId };
+          storage.set('planner', state.planner);
+          renderPlanner();
+          toast('Añadido a la semana');
+          return;
         }
       }
-      const blob=new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url; a.download='planificador_datos.json'; a.click();
-      URL.revokeObjectURL(url);
     }
-    function importarDatos(file){
-      if(!file) return;
-      const reader=new FileReader();
-      reader.onload=()=>{
-        try{
-          const obj=JSON.parse(reader.result);
-          Object.keys(obj).forEach(k=>{
-            if(k.startsWith(STORAGE_PREFIX)) localStorage.setItem(k, obj[k]);
-          });
-          showToast('Datos importados');
-          postInit();
-        }catch(e){ showToast('Error al importar'); }
-      };
-      reader.readAsText(file);
-    }
-    function confirmarReset(){
-      // Reutilizamos modalConfirmar con otra semántica
-      comidaPendienteBorrar = { resetAll:true };
-      document.querySelector('#modalConfirmar h3').textContent='¿Restablecer todo?';
-      document.querySelector('#modalConfirmar p').textContent='Se borrarán recetas, planificación, lista y ajustes.';
-      openModal('modalConfirmar');
-    }
-    // Hook para detectar resetAll
-    const _confirmarBorrado2 = confirmarBorrado;
-    confirmarBorrado = function(){
-      if(comidaPendienteBorrar?.resetAll){
-        // limpiar
-        Object.keys(localStorage).forEach(k=>{
-          if(k.startsWith(STORAGE_PREFIX)) localStorage.removeItem(k);
-        });
-        cerrarModalConfirmar();
-        // Restaurar textos del modal
-        document.querySelector('#modalConfirmar h3').textContent='¿Eliminar comida?';
-        document.querySelector('#modalConfirmar p').textContent='Esta acción no se puede deshacer.';
-        comidaPendienteBorrar=null;
-        postInit();
-        showToast('App restablecida');
-        return;
+    toast('No hay huecos libres');
+  }
+
+  /* ------------------------------ Share recipe ----------------------------- */
+  function shareRecipe(r){
+    const minimal = { id: r.id, name: r.name, desc: r.desc, ingredients: r.ingredients, photo: r.photo };
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify(minimal))));
+    const url = `${location.origin}${location.pathname}?importRecipe=${payload}`;
+    navigator.clipboard?.writeText(url);
+    toast('Enlace copiado al portapapeles');
+  }
+  function checkImportFromURL(){
+    const params = new URLSearchParams(location.search);
+    const imp = params.get('importRecipe');
+    if(imp){
+      try{
+        const obj = JSON.parse(decodeURIComponent(escape(atob(imp))));
+        // if id exists, replace name to avoid conflicts? Keep existing id but ensure uniqueness
+        if(!obj.id || state.recipes.some(x=>x.id===obj.id)) obj.id = uid();
+        state.recipes.unshift({ id: obj.id, name: obj.name||'Receta importada', desc: obj.desc||'', ingredients: obj.ingredients||[], photo: obj.photo||'' });
+        storage.set('recipes', state.recipes);
+        history.replaceState({}, document.title, location.pathname); // cleanup URL
+        toast('Receta importada ✓');
+      }catch{
+        toast('No se pudo importar la receta');
       }
-      // fallback al anterior (puede ser vaciar semana o borrar comida)
-      _confirmarOriginal();
     }
+  }
 
-    // ---------- Helpers UI ----------
-    function openModal(id){
-      const el=document.getElementById(id);
-      el.classList.remove('hidden');
-      el.classList.add('flex');
+  /* ---------------------------- Shopping (To-do) --------------------------- */
+  $('#btnShopping').addEventListener('click', ()=>{ openShopping(); openModal('shoppingDialog'); });
+  function openShopping(){
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    const list = state.shopping[wk] || [];
+    renderTodo(list);
+  }
+  function renderTodo(items){
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    state.shopping[wk] = items;
+    storage.set('shopping', state.shopping);
+    const wrap = $('#todoList'); wrap.innerHTML='';
+    items.forEach((it, idx)=>{
+      const row = document.createElement('div'); row.className='todo-item';
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=!!it.done; cb.style.accentColor='var(--primary)';
+      cb.addEventListener('change', ()=>{ it.done = cb.checked; renderTodo(items); });
+      const input = document.createElement('input'); input.type='text'; input.value=it.text||''; input.placeholder='Artículo';
+      input.addEventListener('input', ()=>{ it.text = input.value; storage.set('shopping', state.shopping); });
+      const del = document.createElement('button'); del.className='btn ghost'; del.textContent='Eliminar';
+      del.addEventListener('click', ()=>{ items.splice(idx,1); renderTodo(items); });
+      row.append(cb, input, del);
+      wrap.appendChild(row);
+    });
+  }
+  $('#addItemBtn').addEventListener('click', ()=>{
+    const v = $('#newItemInput').value.trim(); if(!v) return;
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    state.shopping[wk] = state.shopping[wk] || [];
+    state.shopping[wk].push({ text:v, done:false });
+    $('#newItemInput').value='';
+    renderTodo(state.shopping[wk]);
+  });
+  $('#regenFromMealsBtn').addEventListener('click', ()=>{
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    ensureWeekData(wk);
+    // Gather ingredients from week
+    const set = new Map();
+    for(const dayKey of Object.keys(state.planner[wk])){
+      for(const meal of MEALS){
+        if(!state.settings.show[meal]) continue;
+        const entry = state.planner[wk][dayKey][meal];
+        const list = entry ? ingredientsOf(entry) : [];
+        for(const ing of list){
+          const key = ing.toLowerCase();
+          set.set(key, ing);
+        }
+      }
     }
-    function closeModal(id){
-      const el=document.getElementById(id);
-      el.classList.remove('flex');
-      el.classList.add('hidden');
+    const items = Array.from(set.values()).map(t=>({ text:t, done:false }));
+    state.shopping[wk] = items;
+    renderTodo(items);
+    toast('Lista generada');
+  });
+  $('#clearDoneBtn').addEventListener('click', ()=>{
+    const wk = weekKeyOf(getWeekStart(state.weekOffset));
+    const items = (state.shopping[wk]||[]).filter(it=>!it.done);
+    renderTodo(items);
+  });
+  function ingredientsOf(entry){
+    if(entry.type==='manual') return entry.ingredients || [];
+    if(entry.type==='recipe'){
+      const r = state.recipes.find(x=>x.id===entry.id);
+      return r ? (r.ingredients||[]) : [];
     }
-    function escapeHtml(str=''){
-      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
+    return [];
+  }
 
-    // ---------- Eventos iniciales ----------
-    function initAjustesUI(){
-      // Tema
-      aplicarTemaSaved();
-      const acc = localStorage.getItem(STORAGE_PREFIX+'accent') || '#4a4a4a';
-      cambiarColorCabecera(acc);
-      const colorInput=document.getElementById('colorCabecera'); if(colorInput) colorInput.value=acc;
+  /* -------------------------------- Settings ------------------------------- */
+  $('#toggleDark').addEventListener('change', (e)=>{
+    state.settings.dark = !!e.target.checked;
+    storage.set('settings', state.settings);
+    applySettings();
+  });
+  $('#colorPicker').addEventListener('input', (e)=>{
+    state.settings.primary = e.target.value;
+    storage.set('settings', state.settings);
+    applySettings();
+  });
+  $('#showBreakfast').addEventListener('change', (e)=> toggleMeal('breakfast', e.target.checked));
+  $('#showLunch').addEventListener('change', (e)=> toggleMeal('lunch', e.target.checked));
+  $('#showDinner').addEventListener('change', (e)=> toggleMeal('dinner', e.target.checked));
+  function toggleMeal(meal, val){
+    state.settings.show[meal]=!!val;
+    storage.set('settings', state.settings);
+    renderPlanner();
+  }
+  $('#btnPro').addEventListener('click', ()=> toast('Próximamente • Gestión Pro'));
 
-      // Franjas
-      const vis=getFranjasVisibles();
-      document.getElementById('chkDesayuno').checked=!!vis.desayuno;
-      document.getElementById('chkComida').checked=!!vis.comida;
-      document.getElementById('chkCena').checked=!!vis.cena;
+  /* --------------------------------- Modals -------------------------------- */
+  function openModal(id){ const d = document.getElementById(id); if(!d.open) d.showModal(); }
+  function closeModal(id){ const d = document.getElementById(id); if(d.open) d.close(); }
+  $$('button[data-close]').forEach(b=>{
+    b.addEventListener('click', ()=> closeModal(b.getAttribute('data-close')));
+  });
 
-      ['chkDesayuno','chkComida','chkCena'].forEach(id=>{
-        document.getElementById(id).addEventListener('change', ()=>{
-          const v={
-            desayuno: document.getElementById('chkDesayuno').checked,
-            comida: document.getElementById('chkComida').checked,
-            cena: document.getElementById('chkCena').checked
-          };
-          setFranjasVisibles(v);
-        });
-      });
-    }
+  /* ---------------------------------- Toast -------------------------------- */
+  let toastTimer;
+  function toast(msg){
+    const t = $('#toast');
+    t.textContent = msg;
+    if(!t.open) t.show();
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> t.close(), 1600);
+  }
 
-    function postInit(){
-      cargarTitulo();
-      initAjustesUI();
-      renderTabla();
-      renderRecetas();
-      document.getElementById('btnListaCompra').onclick=abrirModalCompra;
-      // Sincronizar input espejo del título si existe
-      const t = localStorage.getItem(STORAGE_PREFIX+'titulo')||'';
-      const mirror=document.getElementById('tituloInputMirror');
-      if(mirror) mirror.value=t;
-      // default tab
-      showTab('plan');
-    }
+  /* ----------------------------- Placeholders ------------------------------ */
+  function placeholderFor(name){
+    // minimalistic SVG placeholder data URL
+    const bg = encodeURIComponent(getComputedStyle(document.documentElement).getPropertyValue('--primary-weak').trim());
+    const fg = encodeURIComponent(getComputedStyle(document.documentElement).getPropertyValue('--primary').trim());
+    const text = encodeURIComponent((name||'R').slice(0,1).toUpperCase());
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'>
+      <rect width='100%' height='100%' fill='${bg}'/>
+      <circle cx='300' cy='200' r='120' fill='${fg}' opacity='.25'/>
+      <text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' font-size='140' font-family='sans-serif' fill='${fg}'>${text}</text>
+    </svg>`;
+    return 'data:image/svg+xml;utf8,' + svg;
+  }
 
-    document.addEventListener('DOMContentLoaded', postInit);
-  </script>
+  /* --------------------------------- Startup ------------------------------- */
+  applySettings();
+  renderPlanner();
+  renderRecipes();
+  checkImportFromURL();
+
+  // Picker live update after open
+  $('#pickerDialog').addEventListener('close', ()=> $('#pickerSearch').value='');
+
+  // Keyboard UX niceties
+  $('#newItemInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#addItemBtn').click(); }});
+})();
+</script>
 </body>
-      </html>
+              </html>
