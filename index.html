@@ -40,7 +40,7 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
 
 /* Buttons */
 .btn{appearance:none;border:none;background:var(--accent);color:var(--accent-ink);padding:10px 14px;border-radius:12px;font-weight:600;box-shadow:var(--shadow);cursor:pointer}
-.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border);box-shadow:none}
+.btn.ghost{background:transparent;color:var(--text);Border:1px solid var(--border);box-shadow:none}
 .btn.danger{background:#ef4444}
 .icon-btn{appearance:none;border:none;background:transparent;color:var(--text);width:36px;height:36px;border-radius:10px;display:grid;place-items:center}
 .icon-btn:hover{background:var(--surface)}
@@ -304,26 +304,20 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
 
   <!-- 🧠 JS se pegará en la Parte 3 dentro de <script> -->
   <script id="APP_JS_PLACEHOLDER">// =============================
-// Meal Planner Pro — v2 (SPA)
+// Meal Planner Pro — v2 (SPA) — JS corregido
 // =============================
-// • localStorage como base de datos
-// • Modales reutilizables
-// • Drag & Drop con mouse + táctil
-// • Compartir recetas con LZ-String
-// • Lista de la compra manual + generación desde plan
-// • Fotos por FileReader o URL
-// • Franjas configurables (desayuno, comida, cena)
-
 (function(){
-  const qs = s=>document.querySelector(s);
-  const qsa = s=>Array.from(document.querySelectorAll(s));
+  'use strict';
+  const qs = s => document.querySelector(s);
+  const qsa = s => Array.from(document.querySelectorAll(s));
 
   // ---------- Estado ----------
   const STORAGE_KEY = 'mealplanner.v2';
+  let rafRender = null;
   let state = {
     activeTab: 'planner',
     titlePerView: { planner:'Planificador Semanal', recipes:'Mis Recetas', ai:'Chef IA', settings:'Ajustes' },
-    weekStart: startOfWeek(new Date()),
+    weekStart: null, // se inicializa en load()
     settings: { accent:'#6c5ce7', dark:false, slots:{ breakfast:true, lunch:true, dinner:true } },
     account: { email:'', token:'' },
     recipes: [],
@@ -339,80 +333,130 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
   function startOfWeek(d){const x=new Date(d);const day=x.getDay();const diff=(day===0?6:day-1);x.setDate(x.getDate()-diff);x.setHours(0,0,0,0);return x}
   function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
 
-  // ---------- Persistencia ----------
-  function load(){
-    try{const raw=localStorage.getItem(STORAGE_KEY); if(raw){ state = Object.assign(state, JSON.parse(raw)); state.weekStart = new Date(state.weekStart); }}catch(e){console.warn('load err',e)}
-    if(!state.recipes.length){ seed(); save(); }
+  // ---------- Render scheduling & persistencia ----------
+  function scheduleRender(){
+    if(rafRender) cancelAnimationFrame(rafRender);
+    rafRender = requestAnimationFrame(()=>{ rafRender = null; try{ render(); }catch(e){ console.error('render err', e); } });
   }
-  function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); render(); }
+  function save(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch(e){ console.warn('save err', e); }
+    scheduleRender();
+  }
+
+  function load(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        // merge conservando funciones
+        state = Object.assign(state, parsed);
+        if(parsed.weekStart) state.weekStart = new Date(parsed.weekStart);
+      } else {
+        state.weekStart = startOfWeek(new Date());
+      }
+    }catch(e){ console.warn('load err', e); state.weekStart = state.weekStart || startOfWeek(new Date()); }
+    if(!state.recipes || !state.recipes.length){ seed(); save(); }
+  }
 
   // Datos de prueba
   function seed(){
     const r1 = { id:id(), name:'Pasta cremosa con champiñones', desc:'Sencilla y rápida', image:'https://images.unsplash.com/photo-1521389508051-d7ffb5dc8bbf?auto=format&fit=crop&w=1200&q=60', ingredients:['Pasta','Nata','Champiñones','Ajo','Parmesano'], steps:['Hervir pasta','Saltear champiñones','Mezclar con nata','Servir con queso'], notes:['Añadir perejil'], createdAt:Date.now() };
     const r2 = { id:id(), name:'Ensalada mediterránea', desc:'Ligera y fresca', image:'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=1200&q=60', ingredients:['Lechuga','Tomate','Pepino','Queso feta','Aceitunas'], steps:['Trocear','Aliñar'], notes:['Ideal con pan pita'], createdAt:Date.now()-86400000 };
     const alb = { id:id(), name:'Favoritas', desc:'Recetas top', image:r1.image, recipeIds:[] };
-    state.recipes=[r1,r2]; state.albums=[alb];
+    state.recipes = [r1,r2];
+    state.albums = [alb];
     // planner demo: hoy comida = r1
     const today = fmtDate(new Date());
     state.planner[today] = { lunch:{ type:'recipe', id:r1.id } };
-    // lista compra demo vacía (manual)
-    state.shopping.items=[];
+    state.shopping.items = [];
+  }
+
+  // ---------- Helpers faltantes (evitan ReferenceError) ----------
+  function headCell(txt){
+    const e = document.createElement('div'); e.className = 'head'; e.textContent = txt; return e;
+  }
+  function slotNameCell(txt){
+    const e = document.createElement('div'); e.className = 'slot-name'; e.textContent = txt; return e;
   }
 
   // ---------- Temas ----------
-  function setAccent(c){ document.documentElement.style.setProperty('--accent', c); }
+  function setAccent(c){ if(!c) return; document.documentElement.style.setProperty('--accent', c); }
   function setDark(on){ document.body.classList.toggle('dark', !!on); }
 
-  // ---------- Tabs ----------
-  qsa('.tab-item').forEach(btn=> btn.addEventListener('click', ()=>{ state.activeTab = btn.dataset.tab; save(); }))
+  // ---------- Utils DOM y auxiliares ----------
+  function el(tag, cls, txt){ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e }
+  function btn(label, variant){ const b=document.createElement('button'); b.className='btn'+(variant?' '+variant:''); b.textContent=label; return b }
+  function smallBtn(label){ const b=document.createElement('button'); b.className='btn ghost'; b.style.padding='6px 8px'; b.style.borderRadius='8px'; b.textContent=label; return b }
+  function id(){ return Math.random().toString(36).slice(2)+Date.now().toString(36) }
+  function clone(o){ return o? JSON.parse(JSON.stringify(o)) : o }
+  function escape(s=''){ return (s+'').replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]) ) }
+  function fileToDataURL(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }) }
+
+  // ---------- Tabs (bottom nav) ----------
+  (function bindTabs(){
+    qsa('.tab-item').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ const t = btn.dataset.tab; if(!t) return; state.activeTab = t; save(); });
+    });
+  })();
 
   // ---------- Header & título ----------
-  qs('#editTitleBtn').addEventListener('click', ()=>{
-    openModal('Editar título', `
-      <div class="grid">
-        <label>Nuevo título<input class="input" id="titleInput" value="${escape(state.titlePerView[state.activeTab]||'')}" /></label>
-      </div>`, {
-      ok:'Guardar', onOk:()=>{
-        state.titlePerView[state.activeTab] = qs('#titleInput').value.trim()||state.titlePerView[state.activeTab];
-        save();
-      }
-    })
-  })
+  if(qs('#editTitleBtn')){
+    qs('#editTitleBtn').addEventListener('click', ()=>{
+      openModal('Editar título', `
+        <div class="grid">
+          <label>Nuevo título<input class="input" id="titleInput" value="${escape(state.titlePerView[state.activeTab]||'')}" /></label>
+        </div>`, {
+        ok:'Guardar', onOk:()=>{
+          state.titlePerView[state.activeTab] = qs('#titleInput').value.trim()||state.titlePerView[state.activeTab];
+          save();
+        }
+      })
+    });
+  }
 
   // ---------- Semana nav ----------
-  qs('#prevWeekBtn').addEventListener('click', ()=>{ state.weekStart = addDays(state.weekStart,-7); save(); })
-  qs('#nextWeekBtn').addEventListener('click', ()=>{ state.weekStart = addDays(state.weekStart, 7); save(); })
+  if(qs('#prevWeekBtn')) qs('#prevWeekBtn').addEventListener('click', ()=>{ state.weekStart = addDays(state.weekStart,-7); save(); });
+  if(qs('#nextWeekBtn')) qs('#nextWeekBtn').addEventListener('click', ()=>{ state.weekStart = addDays(state.weekStart, 7); save(); });
 
   // ---------- Ajustes ----------
-  qs('#accentPicker').addEventListener('input', e=>{ state.settings.accent=e.target.value; setAccent(e.target.value); save(); })
-  qs('#darkToggle').addEventListener('change', e=>{ state.settings.dark=e.target.checked; setDark(e.target.checked); save(); })
-  qs('#breakfastToggle').addEventListener('change', e=>{ state.settings.slots.breakfast=e.target.checked; save(); })
-  qs('#lunchToggle').addEventListener('change', e=>{ state.settings.slots.lunch=e.target.checked; save(); })
-  qs('#dinnerToggle').addEventListener('change', e=>{ state.settings.slots.dinner=e.target.checked; save(); })
+  if(qs('#accentPicker')) qs('#accentPicker').addEventListener('input', e=>{ state.settings.accent=e.target.value; setAccent(e.target.value); save(); });
+  if(qs('#darkToggle')) qs('#darkToggle').addEventListener('change', e=>{ state.settings.dark=e.target.checked; setDark(e.target.checked); save(); });
+  if(qs('#breakfastToggle')) qs('#breakfastToggle').addEventListener('change', e=>{ state.settings.slots.breakfast=e.target.checked; save(); });
+  if(qs('#lunchToggle')) qs('#lunchToggle').addEventListener('change', e=>{ state.settings.slots.lunch=e.target.checked; save(); });
+  if(qs('#dinnerToggle')) qs('#dinnerToggle').addEventListener('change', e=>{ state.settings.slots.dinner=e.target.checked; save(); });
 
   // Login local
-  qs('#loginBtn').addEventListener('click', ()=>{
-    const email=qs('#emailInput').value.trim(); const pass=qs('#passInput').value.trim();
-    if(!email||!pass){ toast('Completa email y contraseña'); return; }
-    state.account.email=email; state.account.token = btoa(email+':'+pass); save(); toast('Sesión iniciada');
-  })
-  qs('#logoutBtn').addEventListener('click', ()=>{ state.account={email:'',token:''}; save(); toast('Sesión cerrada'); })
+  if(qs('#loginBtn')){
+    qs('#loginBtn').addEventListener('click', ()=>{
+      const email=qs('#emailInput').value.trim(); const pass=qs('#passInput').value.trim();
+      if(!email||!pass){ toast('Completa email y contraseña'); return; }
+      state.account.email=email; state.account.token = btoa(email+':'+pass); save(); toast('Sesión iniciada');
+    });
+  }
+  if(qs('#logoutBtn')) qs('#logoutBtn').addEventListener('click', ()=>{ state.account={email:'',token:''}; save(); toast('Sesión cerrada'); });
 
   // Export/Import
-  qs('#exportBtn').addEventListener('click', ()=>{
-    const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='mealplanner-backup.json'; a.click(); URL.revokeObjectURL(a.href);
-    toast('Exportado');
-  })
-  qs('#importFile').addEventListener('change', async e=>{
-    const file = e.target.files[0]; if(!file) return;
-    try{ const txt = await file.text(); const data = JSON.parse(txt); data.weekStart && (data.weekStart=new Date(data.weekStart)); state = Object.assign(state, data); save(); toast('Importado'); }
-    catch(err){ console.warn(err); toast('Archivo inválido'); }
-    e.target.value='';
-  })
+  if(qs('#exportBtn')){
+    qs('#exportBtn').addEventListener('click', ()=>{
+      try{
+        const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='mealplanner-backup.json'; a.click(); URL.revokeObjectURL(a.href);
+        toast('Exportado');
+      }catch(e){ console.warn(e); toast('Error al exportar'); }
+    });
+  }
+  if(qs('#importFile')){
+    qs('#importFile').addEventListener('change', async e=>{
+      const file = e.target.files[0]; if(!file) return;
+      try{ const txt = await file.text(); const data = JSON.parse(txt); data.weekStart && (data.weekStart=new Date(data.weekStart)); state = Object.assign(state, data); save(); toast('Importado'); }
+      catch(err){ console.warn(err); toast('Archivo inválido'); }
+      e.target.value='';
+    });
+  }
 
   // ---------- Lista de la compra ----------
-  qs('#shoppingListBtn').addEventListener('click', ()=> openShoppingModal());
+  if(qs('#shoppingListBtn')) qs('#shoppingListBtn').addEventListener('click', ()=> openShoppingModal());
   function openShoppingModal(){
     openModal('Lista de la compra', `
       <div id="shoppingTodo" class="todo"></div>
@@ -423,8 +467,9 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
       </div>
     `, { ok:'Cerrar', showOk:false, onOpen:()=>{
       renderTodo('shoppingTodo', state.shopping.items, items=>{ state.shopping.items=items; save(); });
-      qs('#addShoppingBtn').onclick=()=>{ const v=qs('#shoppingInput').value.trim(); if(!v) return; state.shopping.items.push({text:v,done:false}); qs('#shoppingInput').value=''; renderTodo('shoppingTodo', state.shopping.items, items=>{ state.shopping.items=items; save(); }); save(); };
-      qs('#genShoppingBtn').onclick=()=>{ const gen = generateShoppingFromPlan(); state.shopping.items = mergeDistinctTodos(state.shopping.items, gen); renderTodo('shoppingTodo', state.shopping.items, items=>{ state.shopping.items=items; save(); }); save(); toast('Generada desde el plan'); };
+      const addBtn = qs('#addShoppingBtn'), genBtn = qs('#genShoppingBtn');
+      if(addBtn) addBtn.onclick=()=>{ const v=qs('#shoppingInput').value.trim(); if(!v) return; state.shopping.items.push({text:v,done:false}); qs('#shoppingInput').value=''; renderTodo('shoppingTodo', state.shopping.items, items=>{ state.shopping.items=items; save(); }); save(); };
+      if(genBtn) genBtn.onclick=()=>{ const gen = generateShoppingFromPlan(); state.shopping.items = mergeDistinctTodos(state.shopping.items, gen); renderTodo('shoppingTodo', state.shopping.items, items=>{ state.shopping.items=items; save(); }); save(); toast('Generada desde el plan'); };
     }});
   }
   function generateShoppingFromPlan(){
@@ -439,18 +484,19 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     })
     return dedupeTodos(items);
   }
-  function dedupeTodos(arr){ const seen=new Set(); return arr.filter(x=>{const k=x.text.toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true;}); }
-  function mergeDistinctTodos(base, add){ const map=new Map(base.map(i=>[i.text.toLowerCase(),i])); add.forEach(i=>{ const k=i.text.toLowerCase(); if(!map.has(k)) map.set(k,i); }); return Array.from(map.values()); }
+  function dedupeTodos(arr){ const seen=new Set(); return arr.filter(x=>{const k=(x.text||'').toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true;}); }
+  function mergeDistinctTodos(base, add){ const map=new Map(base.map(i=>[(i.text||'').toLowerCase(),i])); add.forEach(i=>{ const k=(i.text||'').toLowerCase(); if(!map.has(k)) map.set(k,i); }); return Array.from(map.values()); }
 
   // ---------- Planner ----------
   const SLOT_LABELS = { breakfast:'Desayuno', lunch:'Comida', dinner:'Cena' };
-
   function getWeekDates(start){ return Array.from({length:7}, (_,i)=> addDays(start,i)); }
 
   function renderPlanner(){
-    const wrap = qs('#plannerGrid'); wrap.innerHTML='';
-    const week = getWeekDates(state.weekStart);
-    qs('#weekLabel').textContent = `${fmtDate(week[0])} · ${fmtDate(week[6])}`;
+    const wrap = qs('#plannerGrid');
+    if(!wrap) return;
+    wrap.innerHTML='';
+    const week = getWeekDates(state.weekStart||startOfWeek(new Date()));
+    qs('#weekLabel') && (qs('#weekLabel').textContent = `${fmtDate(week[0])} · ${fmtDate(week[6])}`);
 
     // header row
     const headRow = el('div','row');
@@ -458,20 +504,20 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     week.forEach(d=> headRow.appendChild(headCell(d.toLocaleDateString('es-ES',{weekday:'short',day:'2-digit'}))));
     wrap.appendChild(headRow);
 
-    const enabledSlots = Object.entries(state.settings.slots).filter(([,on])=>on).map(([k])=>k);
+    const enabledSlots = Object.entries(state.settings.slots || {}).filter(([,on])=>on).map(([k])=>k);
 
     enabledSlots.forEach(slot=>{
       const row = el('div','row');
-      row.appendChild(slotNameCell(SLOT_LABELS[slot]));
+      row.appendChild(slotNameCell(SLOT_LABELS[slot]||slot));
       week.forEach(d=>{
         const dayKey = fmtDate(d);
         const cell = el('div','cell');
         cell.dataset.day=dayKey; cell.dataset.slot=slot;
         hydrateCell(cell);
         row.appendChild(cell);
-      })
+      });
       wrap.appendChild(row);
-    })
+    });
   }
 
   function hydrateCell(cell){
@@ -482,15 +528,15 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
       cell.classList.add('filled');
       if(entry.type==='recipe'){
         const r = state.recipes.find(x=>x.id===entry.id);
-        cell.appendChild(el('div','item-title', r? r.name : '(receta eliminada)'))
+        cell.appendChild(el('div','item-title', r? r.name : '(receta eliminada)'));
         if(r) cell.appendChild(el('div','item-sub', r.desc||''));
       } else {
-        cell.appendChild(el('div','item-title', entry.title||'(manual)'))
-        if(entry.ingredients?.length) cell.appendChild(el('div','item-sub', entry.ingredients.join(', ')))
+        cell.appendChild(el('div','item-title', entry.title||'(manual)'));
+        if(entry.ingredients?.length) cell.appendChild(el('div','item-sub', entry.ingredients.join(', ')));
       }
     } else {
       cell.classList.remove('filled');
-      cell.appendChild(el('div','item-sub','Vacío'))
+      cell.appendChild(el('div','item-sub','Vacío'));
     }
 
     // acciones rápidas
@@ -510,11 +556,16 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     enableDnD(cell);
   }
 
-  function setCell(day,slot,val){ if(!state.planner[day]) state.planner[day]={}; if(val) state.planner[day][slot]=val; else delete state.planner[day][slot]; save(); }
+  function setCell(day,slot,val){
+    if(!state.planner[day]) state.planner[day]={};
+    if(val) state.planner[day][slot]=val;
+    else { if(state.planner[day]) delete state.planner[day][slot]; }
+    save();
+  }
 
   function openCellEditor(day, slot){
     const entry = (state.planner[day]||{})[slot] || {};
-    const recipesOptions = state.recipes.map(r=>`<option value="${r.id}">${escape(r.name)}</option>`).join('');
+    const recipesOptions = (state.recipes||[]).map(r=>`<option value="${r.id}">${escape(r.name)}</option>`).join('');
     openModal('Editar celda', `
       <div class="grid">
         <div class="tabs-switch" id="cellModeSwitch">
@@ -532,13 +583,13 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     `,{
       ok:'Guardar', onOpen:()=>{
         const switcher = qs('#cellModeSwitch');
-        switcher.onclick=(ev)=>{ if(!(ev.target instanceof HTMLButtonElement)) return; qsa('#cellModeSwitch .seg').forEach(b=>b.classList.remove('active')); ev.target.classList.add('active'); const m=ev.target.dataset.mode; qs('#recipeMode').classList.toggle('hidden', m!=='recipe'); qs('#manualMode').classList.toggle('hidden', m!=='manual'); };
+        if(switcher) switcher.onclick=(ev)=>{ if(!(ev.target instanceof HTMLButtonElement)) return; qsa('#cellModeSwitch .seg').forEach(b=>b.classList.remove('active')); ev.target.classList.add('active'); const m=ev.target.dataset.mode; qs('#recipeMode').classList.toggle('hidden', m!=='recipe'); qs('#manualMode').classList.toggle('hidden', m!=='manual'); };
         // preset
         if(entry.type==='recipe'){ const sel=qs('#cellRecipeSel'); if(sel) sel.value=entry.id; }
       }, onOk:()=>{
         const activeMode = qs('#cellModeSwitch .seg.active').dataset.mode;
         if(activeMode==='recipe'){
-          const id = qs('#cellRecipeSel').value; setCell(day,slot,{type:'recipe', id});
+          const idVal = qs('#cellRecipeSel').value; setCell(day,slot,{type:'recipe', id:idVal});
         } else {
           const title = qs('#manualTitle').value.trim();
           const ingredients = qs('#manualIngr').value.split(',').map(s=>s.trim()).filter(Boolean);
@@ -546,7 +597,7 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
           setCell(day,slot,{type:'manual', title, ingredients});
         }
       }
-    })
+    });
   }
 
   // DnD con mouse + táctil
@@ -554,13 +605,13 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     let dragging=false, origin=null; let ghost; let currentTarget=null;
 
     function begin(e){ dragging=true; origin=cell; cell.classList.add('dragging'); ghost=createGhost(cell); document.body.appendChild(ghost); move(e); window.addEventListener(moveEvt(e), move); window.addEventListener(endEvt(e), end, {once:true}); }
-    function move(e){ if(!dragging) return; const p=pointer(e); ghost.style.left=p.x-20+'px'; ghost.style.top=p.y-20+'px';
-      const tgt = document.elementFromPoint(p.x, p.y)?.closest('.cell');
+    function move(e){ if(!dragging) return; const p=pointer(e); if(ghost){ ghost.style.left=p.x-20+'px'; ghost.style.top=p.y-20+'px'; }
+      const elAt = document.elementFromPoint(p.x, p.y); const tgt = elAt ? elAt.closest('.cell') : null;
       if(currentTarget && currentTarget!==tgt) currentTarget.classList.remove('drop-target');
       if(tgt){ tgt.classList.add('drop-target'); currentTarget=tgt; }
     }
     function end(e){ dragging=false; cell.classList.remove('dragging'); ghost?.remove(); currentTarget?.classList.remove('drop-target');
-      const p=pointer(e); const tgt = document.elementFromPoint(p.x, p.y)?.closest('.cell');
+      const p=pointer(e); const elAt = document.elementFromPoint(p.x, p.y); const tgt = elAt ? elAt.closest('.cell') : null;
       if(tgt && tgt!==origin){
         const srcEntry = (state.planner[origin.dataset.day]||{})[origin.dataset.slot];
         setCell(tgt.dataset.day, tgt.dataset.slot, clone(srcEntry));
@@ -571,25 +622,28 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     cell.addEventListener('mousedown', e=>{ if(e.button!==0) return; begin(e); })
     cell.addEventListener('touchstart', e=>{ begin(e); }, {passive:true})
 
-    function moveEvt(e){ return e.type.startsWith('touch')?'touchmove':'mousemove'; }
-    function endEvt(e){ return e.type.startsWith('touch')?'touchend':'mouseup'; }
+    function moveEvt(e){ return (e && e.type && e.type.startsWith && e.type.startsWith('touch')) ? 'touchmove' : 'mousemove'; }
+    function endEvt(e){ return (e && e.type && e.type.startsWith && e.type.startsWith('touch')) ? 'touchend' : 'mouseup'; }
     function pointer(e){ if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX,y:e.touches[0].clientY}; return {x:e.clientX,y:e.clientY}; }
     function createGhost(elm){ const g=document.createElement('div'); g.className='badge'; g.style.position='fixed'; g.style.pointerEvents='none'; g.style.zIndex=200; g.textContent='Mover'; return g; }
   }
 
   // ---------- Recetas ----------
-  qs('#recipesViewBtn').onclick=()=>{ qs('#recipesViewBtn').classList.add('active'); qs('#albumsViewBtn').classList.remove('active'); qs('#recipesList').classList.remove('hidden'); qs('#albumsWrap').classList.add('hidden'); }
-  qs('#albumsViewBtn').onclick=()=>{ qs('#recipesViewBtn').classList.remove('active'); qs('#albumsViewBtn').classList.add('active'); qs('#recipesList').classList.add('hidden'); qs('#albumsWrap').classList.remove('hidden'); }
-
-  qs('#newRecipeBtn').addEventListener('click', ()=> openRecipeEditor());
-  qs('#recipeSearch').addEventListener('input', renderRecipes);
-  qs('#recipeSort').addEventListener('change', renderRecipes);
+  const recipesViewBtn = qs('#recipesViewBtn'), albumsViewBtn = qs('#albumsViewBtn');
+  if(recipesViewBtn && albumsViewBtn){
+    recipesViewBtn.onclick=()=>{ recipesViewBtn.classList.add('active'); albumsViewBtn.classList.remove('active'); qs('#recipesList')?.classList.remove('hidden'); qs('#albumsWrap')?.classList.add('hidden'); };
+    albumsViewBtn.onclick=()=>{ recipesViewBtn.classList.remove('active'); albumsViewBtn.classList.add('active'); qs('#recipesList')?.classList.add('hidden'); qs('#albumsWrap')?.classList.remove('hidden'); };
+  }
+  if(qs('#newRecipeBtn')) qs('#newRecipeBtn').addEventListener('click', ()=> openRecipeEditor());
+  if(qs('#recipeSearch')) qs('#recipeSearch').addEventListener('input', renderRecipes);
+  if(qs('#recipeSort')) qs('#recipeSort').addEventListener('change', renderRecipes);
 
   function renderRecipes(){
     const list = qs('#recipesList');
-    const term = qs('#recipeSearch').value.toLowerCase();
-    const sort = qs('#recipeSort').value;
-    const items = state.recipes.filter(r=> r.name.toLowerCase().includes(term) || (r.desc||'').toLowerCase().includes(term) );
+    if(!list) return;
+    const term = (qs('#recipeSearch')?.value||'').toLowerCase();
+    const sort = qs('#recipeSort')?.value;
+    const items = (state.recipes||[]).filter(r=> r.name.toLowerCase().includes(term) || (r.desc||'').toLowerCase().includes(term) );
     items.sort((a,b)=> sort==='recent'? b.createdAt-a.createdAt : sort==='oldest'? a.createdAt-b.createdAt : a.name.localeCompare(b.name,'es'));
 
     list.innerHTML='';
@@ -600,21 +654,20 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
       c.appendChild(el('div','title', r.name));
       c.appendChild(el('div','desc', r.desc||''));
       const row = el('div','row');
-      const openBtn = btn('Abrir/Editar'); openBtn.style.background='var(--accent)'; // resalta
+      const openBtn = btn('Abrir/Editar'); openBtn.style.background='var(--accent)';
       const shareBtn = btn('Compartir', 'ghost');
-      const delBtn = btn('Eliminar','ghost'); delBtn.style.color='var(--muted)'; // discreto
+      const delBtn = btn('Eliminar','ghost'); delBtn.style.color='var(--muted)';
       const saveBtn = btn('Guardar','ghost');
       row.append(openBtn,shareBtn,delBtn,saveBtn); c.appendChild(row); card.appendChild(c);
       openBtn.onclick=()=> openRecipeEditor(r);
       shareBtn.onclick=()=> shareRecipe(r);
-      delBtn.onclick=()=> confirm(`¿Eliminar "${r.name}"?`, ()=>{ state.recipes = state.recipes.filter(x=>x.id!==r.id); // quitar de planner
+      delBtn.onclick=()=> confirm(`¿Eliminar "${r.name}"?`, ()=>{ state.recipes = state.recipes.filter(x=>x.id!==r.id);
         Object.keys(state.planner).forEach(day=>{ ['breakfast','lunch','dinner'].forEach(s=>{ const e=(state.planner[day]||{})[s]; if(e&&e.type==='recipe'&&e.id===r.id){ delete state.planner[day][s]; } }); });
-        // quitar de álbumes
         state.albums.forEach(a=> a.recipeIds = a.recipeIds.filter(id=>id!==r.id));
         save(); toast('Eliminada'); });
       saveBtn.onclick=()=> toast('Guardado ✓');
       list.appendChild(card);
-    })
+    });
 
     renderAlbums();
   }
@@ -656,7 +709,6 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
       </div>
     `,{
       ok: isEdit? 'Guardar' : 'Crear', onOpen:()=>{
-        // Render listas tipo To-Do
         renderTodo('rIngr', data.ingredients, arr=> data.ingredients=arr );
         renderTodo('rSteps', data.steps, arr=> data.steps=arr );
         renderTodo('rNotes', data.notes, arr=> data.notes=arr );
@@ -664,7 +716,6 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
         qs('#addStep').onclick=()=>{ const v=qs('#stepInput').value.trim(); if(!v) return; data.steps.push(v); qs('#stepInput').value=''; renderTodo('rSteps', data.steps, arr=> data.steps=arr ); };
         qs('#addNote').onclick=()=>{ const v=qs('#noteInput').value.trim(); if(!v) return; data.notes.push(v); qs('#noteInput').value=''; renderTodo('rNotes', data.notes, arr=> data.notes=arr ); };
 
-        // File upload -> dataURL
         qs('#rImgFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const url = await fileToDataURL(f); data.image=url; qs('#rImgUrl').value=url; };
         qs('#printBtn').onclick=()=>{ window.print(); };
       }, onOk:()=>{
@@ -676,21 +727,23 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
         }
         save(); toast(isEdit?'Guardado':'Creado');
       }
-    })
+    });
   }
 
   // Compartir receta por URL comprimida
   function shareRecipe(r){
-    const payload = { name:r.name, desc:r.desc, image:r.image, ingredients:r.ingredients, steps:r.steps, notes:r.notes };
-    const json = JSON.stringify(payload);
-    const compressed = LZString.compressToEncodedURIComponent(json);
-    const url = `${location.origin}${location.pathname}?import=${compressed}`;
-    navigator.clipboard.writeText(url).then(()=> toast('Enlace copiado'));
+    try{
+      const payload = { name:r.name, desc:r.desc, image:r.image, ingredients:r.ingredients, steps:r.steps, notes:r.notes };
+      const json = JSON.stringify(payload);
+      const compressed = LZString.compressToEncodedURIComponent(json);
+      const url = `${location.origin}${location.pathname}?import=${compressed}`;
+      navigator.clipboard.writeText(url).then(()=> toast('Enlace copiado'));
+    }catch(e){ console.warn('share err', e); toast('Error al compartir'); }
   }
 
   function tryImportFromURL(){
-    const sp = new URLSearchParams(location.search); const token=sp.get('import'); if(!token) return;
     try{
+      const sp = new URLSearchParams(location.search); const token=sp.get('import'); if(!token) return;
       const json = LZString.decompressFromEncodedURIComponent(token); const data = JSON.parse(json);
       const r = { id:id(), name:data.name||'Receta', desc:data.desc||'', image:data.image||'', ingredients:data.ingredients||[], steps:data.steps||[], notes:data.notes||[], createdAt:Date.now() };
       state.recipes.unshift(r); save(); toast('Receta importada');
@@ -699,10 +752,12 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
   }
 
   // Álbumes
-  qs('#newAlbumBtn').addEventListener('click', ()=> openAlbumEditor());
+  if(qs('#newAlbumBtn')) qs('#newAlbumBtn').addEventListener('click', ()=> openAlbumEditor());
   function renderAlbums(){
-    const list=qs('#albumsList'); list.innerHTML='';
-    state.albums.forEach(a=>{
+    const list = qs('#albumsList');
+    if(!list) return;
+    list.innerHTML='';
+    (state.albums||[]).forEach(a=>{
       const card=el('div','card');
       const img=document.createElement('img'); img.className='thumb'; img.src=a.image||''; img.alt=a.name; card.appendChild(img);
       const c=el('div','content');
@@ -714,11 +769,11 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
       editBtn.onclick=()=> openAlbumEditor(a);
       delBtn.onclick=()=> confirm(`¿Eliminar álbum "${a.name}"?`, ()=>{ state.albums=state.albums.filter(x=>x.id!==a.id); save(); });
       list.appendChild(card);
-    })
+    });
   }
   function openAlbumEditor(album){
     const isEdit=!!album; const data = album? clone(album) : { id:id(), name:'', desc:'', image:'', recipeIds:[] };
-    const cards = state.recipes.map(r=>`<label class="row"><input type="checkbox" value="${r.id}" ${data.recipeIds.includes(r.id)?'checked':''}/> ${escape(r.name)}</label>`).join('');
+    const cards = (state.recipes||[]).map(r=>`<label class="row"><input type="checkbox" value="${r.id}" ${data.recipeIds.includes(r.id)?'checked':''}/> ${escape(r.name)}</label>`).join('');
     openModal(isEdit?'Editar álbum':'Nuevo álbum', `
       <div class="grid">
         <label>Nombre<input id="aName" class="input" value="${escape(data.name)}"/></label>
@@ -736,73 +791,85 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
       data.recipeIds = qsa('#aList input:checked').map(i=>i.value);
       if(!isEdit) state.albums.unshift(data); else { const i=state.albums.findIndex(x=>x.id===data.id); if(i>-1) state.albums[i]=data; }
       save();
-    }})
+    }});
   }
   function openAlbumViewer(album){
-    const cards = album.recipeIds.map(id=> state.recipes.find(r=>r.id===id)).filter(Boolean).map(r=>`<div class="card"><img class="thumb" src="${escape(r.image||'')}" alt="${escape(r.name)}"/><div class="content"><div class="title">${escape(r.name)}</div><div class="desc">${escape(r.desc||'')}</div></div></div>`).join('');
+    const cards = (album.recipeIds||[]).map(id=> state.recipes.find(r=>r.id===id)).filter(Boolean).map(r=>`<div class="card"><img class="thumb" src="${escape(r.image||'')}" alt="${escape(r.name)}"/><div class="content"><div class="title">${escape(r.name)}</div><div class="desc">${escape(r.desc||'')}</div></div></div>`).join('');
     openModal(album.name, `<div class="cards-grid">${cards||'<small class="muted">Vacío</small>'}</div>`, { ok:'Cerrar', showOk:false });
   }
 
- // (código tuyo inicial hasta openAlbumViewer aquí, sin cambios)
+  // ---------- To-Do reutilizable ----------
+  function renderTodo(hostId, arr, onChange){
+    const host = typeof hostId==='string'? qs('#'+hostId) : hostId; if(!host) return;
+    host.innerHTML='';
+    arr.forEach((text,idx)=>{
+      const item = typeof text==='string'? {text,done:false} : text;
+      const row = el('div','todo-item');
+      const chk = document.createElement('input'); chk.type='checkbox'; chk.className='chk'; chk.checked=!!item.done; chk.onchange=()=>{ item.done=chk.checked; onChange && onChange(arr); save(); };
+      const input = document.createElement('input'); input.type='text'; input.value=item.text; input.oninput=()=>{ item.text=input.value; onChange && onChange(arr); };
+      const del = document.createElement('button'); del.className='del'; del.innerHTML='✕'; del.onclick=()=>{ arr.splice(idx,1); renderTodo(host, arr, onChange); onChange && onChange(arr); save(); };
+      row.append(chk,input,del); host.appendChild(row);
+    });
+  }
 
-// ---------- To-Do reutilizable ----------
-function renderTodo(hostId, arr, onChange){
-  const host = typeof hostId==='string'? qs('#'+hostId) : hostId; host.innerHTML='';
-  arr.forEach((t,idx)=>{
-    const item = typeof t==='string'? {text:t,done:false} : t;
-    const row = el('div','todo-item');
-    const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=item.done;
-    chk.onchange=()=>{ item.done=chk.checked; onChange&&onChange(arr); save(); };
-    const input = document.createElement('input'); input.type='text'; input.value=item.text;
-    input.oninput=()=>{ item.text=input.value; onChange&&onChange(arr); save(); };
-    const del = smallBtn('✕'); del.onclick=()=>{ arr.splice(idx,1); onChange&&onChange(arr); save(); };
-    row.append(chk,input,del); host.appendChild(row);
-  });
-}
+  // ---------- Modal & Toast ----------
+  function openModal(title, bodyHTML, opts={}){
+    const m = qs('#modal'); if(!m) return;
+    m.classList.add('show'); m.setAttribute('aria-hidden','false');
+    qs('#modalTitle').textContent=title; qs('#modalBody').innerHTML=bodyHTML;
+    const okBtn = qs('#modalOkBtn');
+    const showOk = opts.showOk!==false; qs('#modalOkBtn').style.display = showOk?'':'none';
+    const closeEls = m.querySelectorAll('[data-close]');
+    closeEls.forEach(el=> el.onclick=closeModal);
+    okBtn.onclick = ()=>{ if(opts.onOk) opts.onOk(); closeModal(); };
+    opts.onOpen && opts.onOpen();
+  }
+  function confirm(msg, onYes){ openModal('Confirmar', `<p>${escape(msg)}</p>`, { ok:'Aceptar', onOk:onYes }) }
+  function closeModal(){ const m = qs('#modal'); if(!m) return; m.classList.remove('show'); m.setAttribute('aria-hidden','true'); qs('#modalBody').innerHTML=''; }
+  let toastTimer;
+  function toast(msg){
+    const t = qs('#toast'); if(!t) { console.log('toast:',msg); return; }
+    t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=> t.classList.remove('show'), 1600);
+  }
 
-// ---------- Utilidades ----------
-function el(tag, cls, txt){ const e=document.createElement(tag); if(cls) e.className=cls; if(txt) e.textContent=txt; return e; }
-function btn(label, kind){ const b=document.createElement('button'); b.className='btn'+(kind?' '+kind:''); b.textContent=label; return b; }
-function smallBtn(label){ const b=document.createElement('button'); b.className='btn ghost'; b.style.fontSize='0.8em'; b.textContent=label; return b; }
-function id(){ return Math.random().toString(36).slice(2); }
-function escape(s){ return (s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
-function clone(o){ return JSON.parse(JSON.stringify(o)); }
-function fileToDataURL(f){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f); }); }
-function toast(msg){ alert(msg); }
-function confirm(msg,fn){ if(window.confirm(msg)) fn(); }
+  // ---------- Utils ----------
+  function cloneDeep(o){ return o? JSON.parse(JSON.stringify(o)) : o; }
 
-// ---------- Modal ----------
-function openModal(title,body,opts){
-  qs('#modalTitle').textContent=title;
-  qs('#modalBody').innerHTML=body;
-  qs('#modal').classList.remove('hidden');
-  const okBtn=qs('#modalOk'), cancelBtn=qs('#modalCancel');
-  cancelBtn.onclick=()=> closeModal();
-  okBtn.onclick=()=>{ opts.onOk&&opts.onOk(); closeModal(); };
-  if(opts.showOk===false) okBtn.style.display='none'; else { okBtn.style.display=''; if(opts.ok) okBtn.textContent=opts.ok; }
-  opts.onOpen&&opts.onOpen();
-}
-function closeModal(){ qs('#modal').classList.add('hidden'); }
+  // ---------- Render raíz ----------
+  function render(){
+    try{
+      // tema
+      setAccent(state.settings.accent||'#6c5ce7'); setDark(!!state.settings.dark);
+      // header
+      qs('#headerTitle') && (qs('#headerTitle').textContent = state.titlePerView[state.activeTab]||'');
+      // tabs UI
+      qsa('.tab-item').forEach(b=> b.classList.toggle('active', b.dataset.tab===state.activeTab));
+      qsa('.view').forEach(v=> v.classList.remove('active')); const activeView = qs('#view-'+state.activeTab); if(activeView) activeView.classList.add('active');
+      // ajustes UI (inputs)
+      if(qs('#accentPicker')) qs('#accentPicker').value = state.settings.accent||'#6c5ce7';
+      if(qs('#darkToggle')) qs('#darkToggle').checked = !!state.settings.dark;
+      if(qs('#breakfastToggle')) qs('#breakfastToggle').checked = !!state.settings.slots.breakfast;
+      if(qs('#lunchToggle')) qs('#lunchToggle').checked = !!state.settings.slots.lunch;
+      if(qs('#dinnerToggle')) qs('#dinnerToggle').checked = !!state.settings.slots.dinner;
+      // planner & recetas
+      renderPlanner();
+      renderRecipes();
+      // login state
+      if(qs('#loginState')) qs('#loginState').textContent = state.account.email? `Sesión iniciada: ${state.account.email}` : 'Sin sesión';
+    }catch(e){
+      console.error('render root err', e);
+    }
+  }
 
-// ---------- Render principal ----------
-function render(){
-  // título
-  qs('#pageTitle').textContent = state.titlePerView[state.activeTab]||'';
-
-  // vistas
-  qsa('.view').forEach(v=>v.classList.add('hidden'));
-  qs(`#${state.activeTab}View`).classList.remove('hidden');
-
-  if(state.activeTab==='planner') renderPlanner();
-  if(state.activeTab==='recipes'){ renderRecipes(); renderAlbums(); }
-  if(state.activeTab==='settings'){ setAccent(state.settings.accent); setDark(state.settings.dark); }
-}
-
-// ---------- Init ----------
-load();
-tryImportFromURL();
-render();
-
-  </script>
+  // ---------- Init ----------
+  try{
+    load();
+    tryImportFromURL();
+    scheduleRender();
+  }catch(e){
+    console.error('init err', e);
+  }
+})();
+</script>
 </body>
 </html>
