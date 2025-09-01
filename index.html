@@ -221,7 +221,7 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
         <div class="hero">
           <div class="badge">Chef · Próximamente</div>
           <h2>Ideas de recetas con IA</h2>
-          <p>Esta sección está lista para conectarse a una API (OpenAI u otra). Por ahora es un placeholder funcional.</p>
+          <p>Proximamente. Estoy trabajando para que esté disponible lo antes posible. 😉</p>
         </div>
         <div class="ai-box">
           <input id="aiPrompt" type="text" placeholder="Escribe ingredientes que tienes (p. ej. pollo, arroz, tomate)" />
@@ -743,67 +743,66 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     openModal(album.name, `<div class="cards-grid">${cards||'<small class="muted">Vacío</small>'}</div>`, { ok:'Cerrar', showOk:false });
   }
 
-  // ---------- To-Do reutilizable ----------
-  function renderTodo(hostId, arr, onChange){
-    const host = typeof hostId==='string'? qs('#'+hostId) : hostId; host.innerHTML='';
-    arr.forEach((text,idx)=>{
-      // admite dos formatos: string o {text,done}
-      const item = typeof text==='string'? {text,done:false} : text;
-      const row = el('div','todo-item');
-      const chk = document.createElement('input'); chk.type='checkbox'; chk.className='chk'; chk.checked=!!item.done; chk.onchange=()=>{ item.done=chk.checked; onChange && onChange(arr); save(); };
-      const input = document.createElement('input'); input.type='text'; input.value=item.text; input.oninput=()=>{ item.text=input.value; onChange && onChange(arr); };
-      const del = document.createElement('button'); del.className='del'; del.innerHTML='✕'; del.onclick=()=>{ arr.splice(idx,1); renderTodo(host, arr, onChange); onChange && onChange(arr); save(); };
-      row.append(chk,input,del); host.appendChild(row);
-    })
-  }
+ // (código tuyo inicial hasta openAlbumViewer aquí, sin cambios)
 
-  // ---------- Modal & Toast ----------
-  function openModal(title, bodyHTML, opts={}){
-    const m = qs('#modal'); m.classList.add('show'); m.setAttribute('aria-hidden','false');
-    qs('#modalTitle').textContent=title; qs('#modalBody').innerHTML=bodyHTML;
-    const okBtn = qs('#modalOkBtn');
-    const showOk = opts.showOk!==false; qs('#modalOkBtn').style.display = showOk?'':'none';
-    const closeEls = m.querySelectorAll('[data-close]');
-    closeEls.forEach(el=> el.onclick=closeModal);
-    okBtn.onclick = ()=>{ if(opts.onOk) opts.onOk(); closeModal(); };
-    opts.onOpen && opts.onOpen();
-  }
-  function confirm(msg, onYes){ openModal('Confirmar', `<p>${escape(msg)}</p>`, { ok:'Aceptar', onOk:onYes }) }
-  function closeModal(){ const m = qs('#modal'); m.classList.remove('show'); m.setAttribute('aria-hidden','true'); qs('#modalBody').innerHTML=''; }
-  let toastTimer; function toast(msg){ const t=qs('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=> t.classList.remove('show'), 1600); }
+// ---------- To-Do reutilizable ----------
+function renderTodo(hostId, arr, onChange){
+  const host = typeof hostId==='string'? qs('#'+hostId) : hostId; host.innerHTML='';
+  arr.forEach((t,idx)=>{
+    const item = typeof t==='string'? {text:t,done:false} : t;
+    const row = el('div','todo-item');
+    const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=item.done;
+    chk.onchange=()=>{ item.done=chk.checked; onChange&&onChange(arr); save(); };
+    const input = document.createElement('input'); input.type='text'; input.value=item.text;
+    input.oninput=()=>{ item.text=input.value; onChange&&onChange(arr); save(); };
+    const del = smallBtn('✕'); del.onclick=()=>{ arr.splice(idx,1); onChange&&onChange(arr); save(); };
+    row.append(chk,input,del); host.appendChild(row);
+  });
+}
 
-  // ---------- Utils ----------
-  function el(tag, cls, txt){ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e }
-  function btn(label, variant){ const b=document.createElement('button'); b.className='btn'+(variant?' '+variant:''); b.textContent=label; return b }
-  function smallBtn(label){ const b=document.createElement('button'); b.className='btn ghost'; b.style.padding='6px 8px'; b.style.borderRadius='8px'; b.textContent=label; return b }
-  function id(){ return Math.random().toString(36).slice(2)+Date.now().toString(36) }
-  function clone(o){ return o? JSON.parse(JSON.stringify(o)) : o }
-  function escape(s=''){ return s.replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]) ) }
-  function fileToDataURL(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }) }
+// ---------- Utilidades ----------
+function el(tag, cls, txt){ const e=document.createElement(tag); if(cls) e.className=cls; if(txt) e.textContent=txt; return e; }
+function btn(label, kind){ const b=document.createElement('button'); b.className='btn'+(kind?' '+kind:''); b.textContent=label; return b; }
+function smallBtn(label){ const b=document.createElement('button'); b.className='btn ghost'; b.style.fontSize='0.8em'; b.textContent=label; return b; }
+function id(){ return Math.random().toString(36).slice(2); }
+function escape(s){ return (s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function fileToDataURL(f){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f); }); }
+function toast(msg){ alert(msg); }
+function confirm(msg,fn){ if(window.confirm(msg)) fn(); }
 
-  // ---------- Render raíz ----------
-  function render(){
-    // tema
-    setAccent(state.settings.accent||'#6c5ce7'); setDark(!!state.settings.dark);
-    // header
-    qs('#headerTitle').textContent = state.titlePerView[state.activeTab]||'';
-    // tabs
-    qsa('.tab-item').forEach(b=> b.classList.toggle('active', b.dataset.tab===state.activeTab));
-    qsa('.view').forEach(v=> v.classList.remove('active')); qs('#view-'+state.activeTab).classList.add('active');
-    // ajustes UI
-    qs('#accentPicker').value = state.settings.accent||'#6c5ce7';
-    qs('#darkToggle').checked = !!state.settings.dark;
-    qs('#breakfastToggle').checked = !!state.settings.slots.breakfast;
-    qs('#lunchToggle').checked = !!state.settings.slots.lunch;
-    qs('#dinnerToggle').checked = !!state.settings.slots.dinner;
-    // planner & recetas
-    renderPlanner(); renderRecipes();
-    // login state
-    qs('#loginState').textContent = state.account.email? `Sesión iniciada: ${state.account.email}` : 'Sin sesión';
-  }
+// ---------- Modal ----------
+function openModal(title,body,opts){
+  qs('#modalTitle').textContent=title;
+  qs('#modalBody').innerHTML=body;
+  qs('#modal').classList.remove('hidden');
+  const okBtn=qs('#modalOk'), cancelBtn=qs('#modalCancel');
+  cancelBtn.onclick=()=> closeModal();
+  okBtn.onclick=()=>{ opts.onOk&&opts.onOk(); closeModal(); };
+  if(opts.showOk===false) okBtn.style.display='none'; else { okBtn.style.display=''; if(opts.ok) okBtn.textContent=opts.ok; }
+  opts.onOpen&&opts.onOpen();
+}
+function closeModal(){ qs('#modal').classList.add('hidden'); }
 
-  // ---------- Init ----------
-  load(); tryImportFromURL(); render();
-})();</script>
+// ---------- Render principal ----------
+function render(){
+  // título
+  qs('#pageTitle').textContent = state.titlePerView[state.activeTab]||'';
+
+  // vistas
+  qsa('.view').forEach(v=>v.classList.add('hidden'));
+  qs(`#${state.activeTab}View`).classList.remove('hidden');
+
+  if(state.activeTab==='planner') renderPlanner();
+  if(state.activeTab==='recipes'){ renderRecipes(); renderAlbums(); }
+  if(state.activeTab==='settings'){ setAccent(state.settings.accent); setDark(state.settings.dark); }
+}
+
+// ---------- Init ----------
+load();
+tryImportFromURL();
+render();
+
+  </script>
 </body>
 </html>
