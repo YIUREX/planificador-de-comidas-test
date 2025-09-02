@@ -530,7 +530,7 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
 
     // ✅ Solo un botón "✏️ Editar" por celda
     const act = el('div','cell-actions');
-    const btnEdit = smallBtn('✏️ Editar');
+    const btnEdit = smallBtn('✏️');
     act.append(btnEdit); cell.appendChild(act);
     btnEdit.onclick=()=> openCellEditor(dayKey, slot);
 
