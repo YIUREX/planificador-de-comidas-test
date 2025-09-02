@@ -10,8 +10,8 @@
   <!-- LZ-String CDN para compartir recetas mediante URL cortas -->
   <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
 
-  <!-- 💅 CSS se pegará en la Parte 2 dentro de <style> -->
-  <style id="APP_CSS_PLACEHOLDER">:root{
+  <!-- 💅 CSS -->
+  <style>:root{
   --bg:#ffffff; --surface:#f6f7fb; --card:#ffffff; --text:#1f2330; --muted:#6b7280; --accent:#6c5ce7; --accent-ink:#ffffff; --border:#e5e7eb; --shadow:0 8px 24px rgba(2,6,23,.08);
 }
 *{box-sizing:border-box}
@@ -302,8 +302,9 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
   <!-- Toast -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <!-- 🧠 JS se pegará en la Parte 3 dentro de <script> -->
-  <script id="APP_JS_PLACEHOLDER">// =============================
+  <!-- 🧠 JS -->
+  <script>
+// =============================
 // Meal Planner Pro — v2 (SPA) — JS corregido
 // =============================
 (function(){
@@ -349,7 +350,6 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
       const raw = localStorage.getItem(STORAGE_KEY);
       if(raw){
         const parsed = JSON.parse(raw);
-        // merge conservando funciones
         state = Object.assign(state, parsed);
         if(parsed.weekStart) state.weekStart = new Date(parsed.weekStart);
       } else {
@@ -366,25 +366,14 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     const alb = { id:id(), name:'Favoritas', desc:'Recetas top', image:r1.image, recipeIds:[] };
     state.recipes = [r1,r2];
     state.albums = [alb];
-    // planner demo: hoy comida = r1
     const today = fmtDate(new Date());
     state.planner[today] = { lunch:{ type:'recipe', id:r1.id } };
     state.shopping.items = [];
   }
 
-  // ---------- Helpers faltantes (evitan ReferenceError) ----------
-  function headCell(txt){
-    const e = document.createElement('div'); e.className = 'head'; e.textContent = txt; return e;
-  }
-  function slotNameCell(txt){
-    const e = document.createElement('div'); e.className = 'slot-name'; e.textContent = txt; return e;
-  }
-
-  // ---------- Temas ----------
-  function setAccent(c){ if(!c) return; document.documentElement.style.setProperty('--accent', c); }
-  function setDark(on){ document.body.classList.toggle('dark', !!on); }
-
-  // ---------- Utils DOM y auxiliares ----------
+  // ---------- Helpers ----------
+  function headCell(txt){ const e = document.createElement('div'); e.className = 'head'; e.textContent = txt; return e; }
+  function slotNameCell(txt){ const e = document.createElement('div'); e.className = 'slot-name'; e.textContent = txt; return e; }
   function el(tag, cls, txt){ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e }
   function btn(label, variant){ const b=document.createElement('button'); b.className='btn'+(variant?' '+variant:''); b.textContent=label; return b }
   function smallBtn(label){ const b=document.createElement('button'); b.className='btn ghost'; b.style.padding='6px 8px'; b.style.borderRadius='8px'; b.textContent=label; return b }
@@ -539,18 +528,11 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
       cell.appendChild(el('div','item-sub','Vacío'));
     }
 
-    // acciones rápidas
+    // ✅ Solo un botón "✏️ Editar" por celda
     const act = el('div','cell-actions');
-    const btnEdit = smallBtn('Editar');
-    const btnCopy = smallBtn('Copiar');
-    const btnPaste = smallBtn('Pegar');
-    const btnDel = smallBtn('Eliminar');
-    act.append(btnEdit,btnCopy,btnPaste,btnDel); cell.appendChild(act);
-
+    const btnEdit = smallBtn('✏️ Editar');
+    act.append(btnEdit); cell.appendChild(act);
     btnEdit.onclick=()=> openCellEditor(dayKey, slot);
-    btnCopy.onclick=()=>{ state.clipboard = clone(entry); toast('Copiado'); };
-    btnPaste.onclick=()=>{ if(!state.clipboard) return toast('Portapapeles vacío'); setCell(dayKey,slot,clone(state.clipboard)); };
-    btnDel.onclick=()=>{ setCell(dayKey,slot,null); };
 
     // Drag & drop
     enableDnD(cell);
@@ -563,33 +545,85 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     save();
   }
 
+  // 🆕 Editor de celda con opciones (receta con buscador, manual, copiar, pegar, borrar)
   function openCellEditor(day, slot){
     const entry = (state.planner[day]||{})[slot] || {};
-    const recipesOptions = (state.recipes||[]).map(r=>`<option value="${r.id}">${escape(r.name)}</option>`).join('');
     openModal('Editar celda', `
       <div class="grid">
+        <!-- Acciones rápidas -->
+        <div class="row wrap" id="cellQuickActions">
+          <button class="btn ghost" id="cellCopyBtn" title="Copiar">Copiar</button>
+          <button class="btn ghost" id="cellPasteBtn" title="Pegar">Pegar</button>
+          <button class="btn ghost" id="cellDeleteBtn" title="Borrar">Borrar</button>
+        </div>
+
+        <!-- Modo selección -->
         <div class="tabs-switch" id="cellModeSwitch">
           <button class="seg ${entry.type!=='manual'?'active':''}" data-mode="recipe">Seleccionar receta</button>
-          <button class="seg ${entry.type==='manual'?'active':''}" data-mode="manual">Introducir manual</button>
+          <button class="seg ${entry.type==='manual'?'active':''}" data-mode="manual">Introducir manualmente</button>
         </div>
+
+        <!-- Receta -->
         <div id="recipeMode" class="grid ${entry.type==='manual'?'hidden':''}">
-          <label>Receta<select id="cellRecipeSel">${recipesOptions}</select></label>
+          <label>Buscar receta
+            <input id="cellRecipeSearch" class="input" placeholder="Buscar por nombre o descripción"/>
+          </label>
+          <label>Receta
+            <select id="cellRecipeSel"></select>
+          </label>
         </div>
+
+        <!-- Manual -->
         <div id="manualMode" class="grid ${entry.type==='manual'?'':'hidden'}">
           <label>Título<input class="input" id="manualTitle" value="${escape(entry.title||'')}"/></label>
           <label>Ingredientes (separados por coma)<input class="input" id="manualIngr" value="${escape((entry.ingredients||[]).join(', '))}"/></label>
         </div>
       </div>
     `,{
-      ok:'Guardar', onOpen:()=>{
+      ok:'Guardar',
+      onOpen:()=>{
+        // Switch modo
         const switcher = qs('#cellModeSwitch');
-        if(switcher) switcher.onclick=(ev)=>{ if(!(ev.target instanceof HTMLButtonElement)) return; qsa('#cellModeSwitch .seg').forEach(b=>b.classList.remove('active')); ev.target.classList.add('active'); const m=ev.target.dataset.mode; qs('#recipeMode').classList.toggle('hidden', m!=='recipe'); qs('#manualMode').classList.toggle('hidden', m!=='manual'); };
-        // preset
-        if(entry.type==='recipe'){ const sel=qs('#cellRecipeSel'); if(sel) sel.value=entry.id; }
-      }, onOk:()=>{
+        if(switcher) switcher.onclick=(ev)=>{
+          if(!(ev.target instanceof HTMLButtonElement)) return;
+          qsa('#cellModeSwitch .seg').forEach(b=>b.classList.remove('active'));
+          ev.target.classList.add('active');
+          const m=ev.target.dataset.mode;
+          qs('#recipeMode').classList.toggle('hidden', m!=='recipe');
+          qs('#manualMode').classList.toggle('hidden', m!=='manual');
+        };
+
+        // Rellenar selector recetas + buscador
+        const sel = qs('#cellRecipeSel');
+        const search = qs('#cellRecipeSearch');
+        const all = (state.recipes||[]).slice();
+
+        function renderOptions(filter=''){
+          const f = filter.trim().toLowerCase();
+          sel.innerHTML = all
+            .filter(r => r.name.toLowerCase().includes(f) || (r.desc||'').toLowerCase().includes(f))
+            .map(r=>`<option value="${r.id}">${escape(r.name)}</option>`)
+            .join('');
+        }
+        renderOptions('');
+        if(entry.type==='recipe' && sel){ sel.value = entry.id; }
+        if(search){ search.oninput = ()=> renderOptions(search.value); }
+
+        // Acciones rápidas
+        const copyBtn = qs('#cellCopyBtn');
+        const pasteBtn = qs('#cellPasteBtn');
+        const delBtn = qs('#cellDeleteBtn');
+
+        copyBtn.onclick = ()=>{ const e=(state.planner[day]||{})[slot]||null; state.clipboard = clone(e); toast('Copiado'); };
+        pasteBtn.onclick = ()=>{ if(!state.clipboard){ toast('Portapapeles vacío'); return; } setCell(day,slot,clone(state.clipboard)); toast('Pegado'); closeModal(); };
+        delBtn.onclick = ()=>{ setCell(day,slot,null); toast('Borrado'); closeModal(); };
+      },
+      onOk:()=>{
         const activeMode = qs('#cellModeSwitch .seg.active').dataset.mode;
         if(activeMode==='recipe'){
-          const idVal = qs('#cellRecipeSel').value; setCell(day,slot,{type:'recipe', id:idVal});
+          const idVal = qs('#cellRecipeSel').value;
+          if(!idVal){ toast('Elige una receta'); return; }
+          setCell(day,slot,{type:'recipe', id:idVal});
         } else {
           const title = qs('#manualTitle').value.trim();
           const ingredients = qs('#manualIngr').value.split(',').map(s=>s.trim()).filter(Boolean);
@@ -832,8 +866,9 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=> t.classList.remove('show'), 1600);
   }
 
-  // ---------- Utils ----------
-  function cloneDeep(o){ return o? JSON.parse(JSON.stringify(o)) : o; }
+  // ---------- Tema ----------
+  function setAccent(c){ if(!c) return; document.documentElement.style.setProperty('--accent', c); }
+  function setDark(on){ document.body.classList.toggle('dark', !!on); }
 
   // ---------- Render raíz ----------
   function render(){
@@ -870,6 +905,6 @@ body.dark{--bg:#0e1116;--surface:#131722;--card:#151a25;--text:#e5e7eb;--muted:#
     console.error('init err', e);
   }
 })();
-</script>
+  </script>
 </body>
 </html>
